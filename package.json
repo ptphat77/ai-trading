@@ -1,0 +1,20 @@
+{
+  "name": "tradebot-xau-gemini",
+  "version": "1.0.0",
+  "description": "Trading Bot for XAU/USD using OANDA and Gemini AI",
+  "main": "scripts/run_live.js",
+  "scripts": {
+    "start": "node scripts/run_live.js",
+    "backtest": "node scripts/run_backtest.js",
+    "test": "npx jest"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "better-sqlite3": "^11.2.0",
+    "dotenv": "^16.4.5",
+    "technicalindicators": "^3.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
