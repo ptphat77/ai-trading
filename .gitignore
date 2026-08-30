@@ -4,3 +4,6 @@ dist/
 .DS_Store
 logs/
 backtest_result.json
+
+# Candle data files — do not commit (can be large, source-specific)
+data/*.csv

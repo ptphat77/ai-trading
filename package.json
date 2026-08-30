@@ -1,7 +1,7 @@
 {
   "name": "tradebot-xau-gemini",
   "version": "1.0.0",
-  "description": "Trading Bot for XAU/USD using OANDA and Gemini AI",
+  "description": "AI-powered trading bot for XAU/USD using Broker REST API and Google Gemini",
   "main": "scripts/run_live.js",
   "scripts": {
     "start": "node scripts/run_live.js",
