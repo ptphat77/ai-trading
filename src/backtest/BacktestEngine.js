@@ -1,27 +1,300 @@
 const CsvDataClient = require('../data/CsvDataClient');
+const GeminiAgent = require('../ai/GeminiAgent');
+const { buildContext } = require('../bot/SignalBuilder');
+const { calculateUnits } = require('../bot/RiskManager');
+const globalConfig = require('../config');
+const { log } = require('../utils/logger');
 
 /**
  * BacktestEngine — simulates trading on historical candle data.
  *
- * Data source: CsvDataClient.getCandles() — no broker API needed.
+ * Data source: CsvDataClient (reads local CSV file, no broker API needed).
  * Two modes:
- *   - rule-based:    fast, uses MA cross + RSI hard rules, no Gemini quota consumed.
- *   - ai-simulated: actual Gemini calls, used to validate prompt quality.
+ *   - rule-based:    fast, uses MA cross + RSI hard rules per STRATEGY.md, no Gemini quota consumed.
+ *   - ai-simulated:  actual Gemini calls via GeminiAgent, used to validate prompt quality.
  *
- * See ARCHITECTURE.md §Layer 5 and STRATEGY.md for parameters.
+ * See ARCHITECTURE.md §Layer 5 and STRATEGY.md for parameters and schemas.
  */
 class BacktestEngine {
-  constructor() {
-    // Uses CsvDataClient (Phase 1 & 2 — local CSV, no broker API needed)
-    this.dataClient = new CsvDataClient();
+  /**
+   * @param {Object} [options]
+   * @param {CsvDataClient} [options.dataClient] - Optional injected data client
+   * @param {GeminiAgent} [options.geminiAgent] - Optional injected Gemini agent
+   */
+  constructor(options = {}) {
+    this.dataClient = options.dataClient || new CsvDataClient();
+    this.geminiAgent = options.geminiAgent || new GeminiAgent();
   }
 
-  async runRuleBased() {
-    // Run fast rule-based simulation
+  /**
+   * Runs rule-based backtest on historical data without calling Gemini.
+   *
+   * Entry rules (STRATEGY.md §2):
+   * - Bullish: MA fast crosses above MA slow AND RSI < RSI_OVERSOLD -> BUY
+   * - Bearish: MA fast crosses below MA slow AND RSI > RSI_OVERBOUGHT -> SELL
+   * - Otherwise: skip
+   *
+   * @param {Object} [customConfig] - Optional config overrides
+   * @returns {Promise<Object>} Backtest execution result with trades and logs
+   */
+  async runRuleBased(customConfig = {}) {
+    return this._runSimulation('rule-based', customConfig);
   }
 
-  async runAISimulated() {
-    // Run simulation with actual Gemini calls
+  /**
+   * Runs AI-simulated backtest on historical data with Gemini decision making.
+   *
+   * @param {Object} [customConfig] - Optional config overrides
+   * @returns {Promise<Object>} Backtest execution result with trades and logs
+   */
+  async runAISimulated(customConfig = {}) {
+    return this._runSimulation('ai-simulated', customConfig);
+  }
+
+  /**
+   * Core simulation engine over historical candles.
+   *
+   * @private
+   * @param {'rule-based'|'ai-simulated'} mode
+   * @param {Object} customConfig
+   * @returns {Promise<Object>}
+   */
+  async _runSimulation(mode, customConfig = {}) {
+    const config = { ...globalConfig, ...customConfig };
+    const windowSize = config.CANDLE_COUNT || 100;
+    const initialBalance = config.INITIAL_BALANCE || 100000;
+    const defaultSlAtrMultiplier = config.DEFAULT_SL_ATR_MULTIPLIER || 1.5;
+    const defaultTpAtrMultiplier = config.DEFAULT_TP_ATR_MULTIPLIER || 2.5;
+
+    // Load all historical candles from data client
+    const candles = await this.dataClient.getCandles(Number.MAX_SAFE_INTEGER);
+
+    if (!candles || candles.length < windowSize) {
+      log('warn', 'Insufficient candles for backtesting', {
+        count: candles ? candles.length : 0,
+        required: windowSize
+      });
+      return {
+        mode,
+        initialBalance,
+        finalBalance: initialBalance,
+        trades: [],
+        logs: [],
+        candlesCount: candles ? candles.length : 0
+      };
+    }
+
+    let currentBalance = initialBalance;
+    let openPosition = null;
+    const trades = [];
+    const logs = [];
+
+    // Slide window across candles
+    for (let i = windowSize - 1; i < candles.length; i++) {
+      const currentCandle = candles[i];
+
+      // 1. Check open position against current candle price extremes (SL/TP)
+      if (openPosition) {
+        let exitPrice = null;
+        let exitReason = null;
+
+        if (openPosition.side === 'buy') {
+          // Check SL first for risk safety
+          if (currentCandle.low <= openPosition.sl) {
+            exitPrice = openPosition.sl;
+            exitReason = 'sl';
+          } else if (currentCandle.high >= openPosition.tp) {
+            exitPrice = openPosition.tp;
+            exitReason = 'tp';
+          }
+        } else if (openPosition.side === 'sell') {
+          if (currentCandle.high >= openPosition.sl) {
+            exitPrice = openPosition.sl;
+            exitReason = 'sl';
+          } else if (currentCandle.low <= openPosition.tp) {
+            exitPrice = openPosition.tp;
+            exitReason = 'tp';
+          }
+        }
+
+        if (exitReason !== null) {
+          const profit = openPosition.side === 'buy'
+            ? (exitPrice - openPosition.entryPrice) * openPosition.units
+            : (openPosition.entryPrice - exitPrice) * openPosition.units;
+
+          const tradeRecord = {
+            id: `trade_${trades.length + 1}`,
+            symbol: openPosition.symbol,
+            side: openPosition.side,
+            entryTime: openPosition.entryTime,
+            entryPrice: openPosition.entryPrice,
+            exitTime: currentCandle.time,
+            exitPrice,
+            sl: openPosition.sl,
+            tp: openPosition.tp,
+            units: openPosition.units,
+            profit: Number(profit.toFixed(2)),
+            profitPercent: Number((profit / (currentBalance || 1)).toFixed(4)),
+            exitReason
+          };
+
+          trades.push(tradeRecord);
+          currentBalance += profit;
+          openPosition = null;
+        }
+
+        // Never open a new position while one is still open
+        continue;
+      }
+
+      // 2. Build context for the current window
+      const candleWindow = candles.slice(i - windowSize + 1, i + 1);
+      const context = buildContext(candleWindow, config);
+
+      if (!context) {
+        continue;
+      }
+
+      // 3. Determine decision based on mode
+      let decision;
+      if (mode === 'rule-based') {
+        decision = this._evaluateRuleBasedDecision(context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier);
+      } else {
+        try {
+          decision = await this.geminiAgent.getDecision(context);
+        } catch (error) {
+          log('warn', 'AI decision error during backtest', { error: error.message });
+          decision = {
+            action: 'skip',
+            confidence: 0,
+            sl_atr_multiplier: defaultSlAtrMultiplier,
+            tp_atr_multiplier: defaultTpAtrMultiplier,
+            reason: `AI decision error: ${error.message}`
+          };
+        }
+      }
+
+      // 4. Handle Decision and Risk Management
+      let executedOrder = null;
+      if (
+        (decision.action === 'buy' || decision.action === 'sell') &&
+        decision.confidence >= config.MIN_CONFIDENCE
+      ) {
+        const currentPrice = currentCandle.close;
+        const atr = context.indicators.atr;
+
+        if (atr > 0) {
+          const slMultiplier = decision.sl_atr_multiplier || defaultSlAtrMultiplier;
+          const tpMultiplier = decision.tp_atr_multiplier || defaultTpAtrMultiplier;
+
+          const slDistance = Number((slMultiplier * atr).toFixed(2));
+          const tpDistance = Number((tpMultiplier * atr).toFixed(2));
+
+          let sl;
+          let tp;
+
+          if (decision.action === 'buy') {
+            sl = Number((currentPrice - slDistance).toFixed(2));
+            tp = Number((currentPrice + tpDistance).toFixed(2));
+          } else {
+            sl = Number((currentPrice + slDistance).toFixed(2));
+            tp = Number((currentPrice - tpDistance).toFixed(2));
+          }
+
+          const units = calculateUnits(currentBalance, config.RISK_PER_TRADE, slDistance);
+
+          if (units > 0) {
+            openPosition = {
+              symbol: config.SYMBOL,
+              side: decision.action,
+              entryPrice: currentPrice,
+              entryTime: currentCandle.time,
+              sl,
+              tp,
+              units,
+              slDistance
+            };
+
+            executedOrder = { sl, tp, units };
+          }
+        }
+      }
+
+      // 5. Record Log Entry (DATA-SCHEMA.md §6)
+      const logEntry = {
+        timestamp: currentCandle.time,
+        symbol: config.SYMBOL,
+        action: decision.action,
+        reason: decision.reason,
+        confidence: decision.confidence,
+        strategy_version: config.STRATEGY_VERSION || 'v1.0',
+        price: currentCandle.close,
+        sl: executedOrder ? executedOrder.sl : null,
+        tp: executedOrder ? executedOrder.tp : null,
+        units: executedOrder ? executedOrder.units : 0,
+        gemini_raw_response: decision,
+        error: null
+      };
+
+      logs.push(logEntry);
+    }
+
+    return {
+      mode,
+      initialBalance,
+      finalBalance: Number(currentBalance.toFixed(2)),
+      trades,
+      logs,
+      candlesCount: candles.length
+    };
+  }
+
+  /**
+   * Rule-based decision evaluation using MA cross & RSI thresholds.
+   *
+   * @private
+   * @param {Object} context
+   * @param {Object} config
+   * @param {number} defaultSlAtrMultiplier
+   * @param {number} defaultTpAtrMultiplier
+   * @returns {Object}
+   */
+  _evaluateRuleBasedDecision(context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier) {
+    const { indicators } = context;
+
+    if (
+      indicators.ma_cross === 'bullish_cross' &&
+      indicators.rsi < config.RSI_OVERSOLD
+    ) {
+      return {
+        action: 'buy',
+        confidence: 1.0,
+        sl_atr_multiplier: defaultSlAtrMultiplier,
+        tp_atr_multiplier: defaultTpAtrMultiplier,
+        reason: `Rule-based: Bullish cross and RSI (${indicators.rsi}) < oversold threshold (${config.RSI_OVERSOLD})`
+      };
+    }
+
+    if (
+      indicators.ma_cross === 'bearish_cross' &&
+      indicators.rsi > config.RSI_OVERBOUGHT
+    ) {
+      return {
+        action: 'sell',
+        confidence: 1.0,
+        sl_atr_multiplier: defaultSlAtrMultiplier,
+        tp_atr_multiplier: defaultTpAtrMultiplier,
+        reason: `Rule-based: Bearish cross and RSI (${indicators.rsi}) > overbought threshold (${config.RSI_OVERBOUGHT})`
+      };
+    }
+
+    return {
+      action: 'skip',
+      confidence: 0.0,
+      sl_atr_multiplier: defaultSlAtrMultiplier,
+      tp_atr_multiplier: defaultTpAtrMultiplier,
+      reason: 'Rule-based: No entry condition met'
+    };
   }
 }
 
