@@ -32,8 +32,9 @@ When the user asks to write a test, add a test, or verify the behavior of a modu
    | `src/ai/GeminiAgent.js` | Mock API test | Mock Gemini response → assert decision + fallback |
    | `src/bot/RiskManager.js` | Pure calculation test | Known inputs → assert units |
    | `src/bot/SignalBuilder.js` | Integration-lite | Mock candles + indicators → assert context |
-   | `src/bot/TradingBot.js` | Integration test | Mock OandaClient + GeminiAgent → assert flow |
-   | `src/data/OandaClient.js` | Mock HTTP test | Mock axios → assert request format + error handling |
+   | `src/bot/TradingBot.js` | Integration test | Mock BrokerClient + GeminiAgent → assert flow |
+   | `src/data/BrokerClient.js` | Mock HTTP test | Mock axios → assert request format + error handling |
+   | `src/data/CsvDataClient.js` | File read test | Mock fs/CSV parsing → assert Candle[] output |
    | `src/backtest/BacktestEngine.js` | Simulation test | Feed candle fixture → assert trade log |
    | `src/backtest/ReportGenerator.js` | Calculation test | Mock trade log → assert metrics |
 
@@ -65,7 +66,7 @@ Tests must cover all safety paths from `API-CONTRACTS.md §2.3`:
 - Edge case: SL distance = 0 (avoid division by zero).
 
 #### TradingBot Tests (Layer 4)
-- Mock `OandaClient` to return candles + positions.
+- Mock `BrokerClient` to return candles + positions.
 - Mock `GeminiAgent` to return various decisions.
 - Assert: when there's an open position → skip, do not call `createOrder`.
 - Assert: when GeminiAgent returns `buy` with sufficient confidence → call `createOrder` with correct params.

@@ -29,7 +29,7 @@ Check each item below and report **PASS / FAIL / N/A** for each:
 #### 🔐 Security
 - [ ] **No .env staged**: `.env` does not appear in `git status --short` under staged.
 - [ ] **No secrets in code**: No API keys, tokens, or account IDs are hardcoded in the diff.
-- [ ] **No secrets in logs**: `OANDA_API_KEY` or `GEMINI_API_KEY` are not in any `console.log` or logger calls.
+- [ ] **No secrets in logs**: `BROKER_API_KEY` or `GEMINI_API_KEY` are not in any `console.log` or logger calls.
 
 #### 🏗️ Architecture & Config
 - [ ] **No hardcoded config**: No URLs, model names, thresholds, or risk % hardcoded in business logic — everything read from `src/config.js`.
@@ -41,7 +41,7 @@ Check each item below and report **PASS / FAIL / N/A** for each:
 - [ ] **No blind trades**: All code paths leading to `createOrder` go through validation (confidence check, JSON parse check).
 - [ ] **RiskManager not bypassed**: No code path calls `createOrder` without going through `RiskManager.calculateUnits()`.
 - [ ] **No new position while open**: Logic to check `getOpenPositions()` before opening a new position remains intact.
-- [ ] **All API calls have try/catch**: Every `await oandaClient.*` and `await geminiAgent.*` is inside a `try/catch`.
+- [ ] **All API calls have try/catch**: Every `await brokerClient.*` and `await geminiAgent.*` is inside a `try/catch`.
 
 #### 📝 Code Quality
 - [ ] **No stray debug logs**: No `console.log('debug...')` or temp logs bypassing `logger.js`.
@@ -60,7 +60,7 @@ Present the results in standard format:
 ```
 ✅ PASS — No .env staged
 ✅ PASS — No secrets in code
-❌ FAIL — Hardcoded URL found in OandaClient.js line 12
+❌ FAIL — Hardcoded URL found in BrokerClient.js line 12
 ⚠️  N/A  — STRATEGY.md update (no strategy param changes)
 ```
 

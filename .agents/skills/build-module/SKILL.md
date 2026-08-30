@@ -26,7 +26,7 @@ When the user requests to build, implement, create anew, or add a module/feature
 **Action:**
 1. Read `@docs/PRD.md` §3-4 — confirm the feature is in-scope.
 2. Read `@docs/ARCHITECTURE.md` — identify which **layer** this module belongs to and in which **file** it should reside:
-   - Layer 1 → `src/data/OandaClient.js`
+   - Layer 1 → `src/data/CsvDataClient.js` (Phase 1 & 2: Backtest/Test) or `src/data/BrokerClient.js` (Phase 3 & 4: Paper/Live)
    - Layer 2 → `src/indicators/*.js`
    - Layer 3 → `src/ai/GeminiAgent.js`
    - Layer 4 → `src/bot/*.js`
@@ -67,10 +67,11 @@ When the user requests to build, implement, create anew, or add a module/feature
 
 **Layer-specific constraints:**
 - **Indicator (Layer 2):** Pure function, no side-effects, no I/O, do not import from `src/bot/` or `src/data/`.
-- **OandaClient (Layer 1):** Only calls the API + maps response — does not calculate SL/TP, does not calculate risk.
+- **BrokerClient (Layer 1):** Only calls the Broker REST API + maps response — does not calculate SL/TP, does not calculate risk. No business logic.
+- **CsvDataClient (Layer 1):** Reads local CSV file only — mocks order/balance methods. Used for Phase 1 & 2 (no network calls).
 - **GeminiAgent (Layer 3):** Validate response per `API-CONTRACTS.md §2.3`; fallback `skip` on parse fail / timeout / low confidence.
 - **Bot logic (Layer 4):** All orders must pass through `RiskManager.calculateUnits()` — no exceptions.
-- **Backtest (Layer 5):** Do not call the real OANDA API when in `rule-based` mode.
+- **Backtest (Layer 5):** Use `CsvDataClient` (not `BrokerClient`) — do not make real broker API calls in `rule-based` mode.
 
 ---
 
@@ -81,7 +82,7 @@ When the user requests to build, implement, create anew, or add a module/feature
    - [ ] Correct file location and naming convention
    - [ ] Module has Single Responsibility (SRP)
    - [ ] Every API call has `try/catch` + logging
-   - [ ] No business logic inside `OandaClient.js`
+   - [ ] No business logic inside `BrokerClient.js`
    - [ ] If new strategy parameters exist → `STRATEGY.md` is updated
 2. Propose writing tests: suggest the user run the `write-test` skill for the newly created module.
 
@@ -90,7 +91,7 @@ When the user requests to build, implement, create anew, or add a module/feature
 ## Hard Constraints
 - **Never create files outside the structure in `ARCHITECTURE.md`.**
 - **Never hardcode config values** — always use `src/config.js`.
-- **Never put business logic in `OandaClient.js`.**
+- **Never put business logic in `BrokerClient.js`.**
 - **Never bypass `RiskManager`** when placing orders.
 - **Never implement out-of-scope features** — check `PRD.md §4` first.
 

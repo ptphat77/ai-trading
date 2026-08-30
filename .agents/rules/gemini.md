@@ -23,7 +23,7 @@ Understand the layer-based folder structure, module boundaries (Data / Indicator
 → Read `@docs/ARCHITECTURE.md` + `@docs/STRATEGY.md`.
 All parameters (MA period, RSI threshold, ATR multiplier, prompt template) are defined in `STRATEGY.md`. Do not hardcode parameters in the code.
 
-### When working with OANDA API or Gemini API
+### When working with Broker REST API or Gemini API
 → Read `@docs/data/API-CONTRACTS.md` first.
 All endpoint paths, request/response shapes, error handling contracts, and internal module interfaces are defined there.
 
@@ -69,10 +69,10 @@ Record the current version and baseline backtest. All parameter changes must upd
 - **Never hardcode config.** API keys, model names, symbols, thresholds, risk %, URLs... must all be read from `.env` via `src/config.js`.
 - **Never hardcode strategy params in code.** MA period, RSI threshold, ATR multiplier, prompts → read from config, reference `STRATEGY.md`.
 - **Never commit `.env`.** The `.env` file must be in `.gitignore` from the first commit.
-- **Never log API keys.** OANDA_API_KEY or GEMINI_API_KEY must not be logged to the console or log files.
+- **Never log API keys.** BROKER_API_KEY or GEMINI_API_KEY must not be logged to the console or log files.
 - **Never let a single API error crash the bot loop.** All external API calls must have `try/catch`; errors should only `skip` that cycle, not crash the entire loop.
 - **Never change strategy params without updating `STRATEGY.md`.** Bump the version, state the reason, and include the backtest result — this is a mandatory requirement before merging.
 - **Never go Live without Demo ≥ 1 week.** Only switch to live trading after the Demo has run stably and continuously for ≥ 1 week (per `PROJECT-RULES.md §1.3`).
 - **Never open a new position while one is already open** on the same symbol.
-- **Never write business logic inside `OandaClient.js`.** This module only calls the API and returns raw data.
+- **Never write business logic inside `BrokerClient.js`.** This module only calls the API and returns raw data.
 - **Never implement out-of-scope features.** Check `PRD.md §4` before building anything new.
