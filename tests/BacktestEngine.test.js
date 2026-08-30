@@ -115,6 +115,8 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          ma9: 2005,
+          ma21: 1995,
           ma_cross: 'bullish_cross',
           rsi: 25,
           atr: 2
@@ -154,6 +156,8 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          ma9: 2005,
+          ma21: 1995,
           ma_cross: 'bullish_cross',
           rsi: 28,
           atr: 2
@@ -191,6 +195,8 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          ma9: 1995,
+          ma21: 2005,
           ma_cross: 'bearish_cross',
           rsi: 75,
           atr: 2
@@ -231,6 +237,8 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          ma9: 2005,
+          ma21: 1995,
           ma_cross: 'bullish_cross',
           rsi: 20,
           atr: 2

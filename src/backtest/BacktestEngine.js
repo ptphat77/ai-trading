@@ -89,6 +89,13 @@ class BacktestEngine {
     const trades = [];
     const logs = [];
 
+    // State machine for tracking setup conditions (RSI extremes + EMA cross)
+    let buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+    let sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+
+    const rsiLookback = config.RSI_LOOKBACK_CANDLES || 20;
+    const confirmationWindow = config.EMA_CONFIRMATION_WINDOW || 5;
+
     // Slide window across candles
     for (let i = windowSize - 1; i < candles.length; i++) {
       const currentCandle = candles[i];
@@ -141,6 +148,9 @@ class BacktestEngine {
           trades.push(tradeRecord);
           currentBalance += profit;
           openPosition = null;
+          // Reset setups after closing position
+          buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+          sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
         }
 
         // Never open a new position while one is still open
@@ -155,10 +165,55 @@ class BacktestEngine {
         continue;
       }
 
-      // 3. Determine decision based on mode
+      // 3. Update Setup State Machine counters
+      buySetup.rsiCandlesAgo++;
+      buySetup.crossCandlesAgo++;
+      sellSetup.rsiCandlesAgo++;
+      sellSetup.crossCandlesAgo++;
+
+      if (context.indicators.rsi <= config.RSI_OVERSOLD) {
+        buySetup.rsiTouched = true;
+        buySetup.rsiCandlesAgo = 0;
+      }
+      if (context.indicators.rsi >= config.RSI_OVERBOUGHT) {
+        sellSetup.rsiTouched = true;
+        sellSetup.rsiCandlesAgo = 0;
+      }
+
+      if (context.indicators.ma_cross === 'bullish_cross') {
+        buySetup.emaCrossed = true;
+        buySetup.crossCandlesAgo = 0;
+        sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+      } else if (context.indicators.ma_cross === 'bearish_cross') {
+        sellSetup.emaCrossed = true;
+        sellSetup.crossCandlesAgo = 0;
+        buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+      }
+
+      // Check timeouts for setup expiry
+      if (buySetup.rsiCandlesAgo > rsiLookback) buySetup.rsiTouched = false;
+      if (buySetup.crossCandlesAgo > confirmationWindow) buySetup.emaCrossed = false;
+      if (sellSetup.rsiCandlesAgo > rsiLookback) sellSetup.rsiTouched = false;
+      if (sellSetup.crossCandlesAgo > confirmationWindow) sellSetup.emaCrossed = false;
+
+      // 4. Determine decision based on mode
       let decision;
       if (mode === 'rule-based') {
-        decision = this._evaluateRuleBasedDecision(context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier);
+        decision = this._evaluateRuleBasedDecision(
+          context,
+          currentCandle,
+          config,
+          buySetup,
+          sellSetup,
+          defaultSlAtrMultiplier,
+          defaultTpAtrMultiplier
+        );
+
+        if (decision.action === 'buy') {
+          buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+        } else if (decision.action === 'sell') {
+          sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+        }
       } else {
         try {
           decision = await this.geminiAgent.getDecision(context);
@@ -174,7 +229,7 @@ class BacktestEngine {
         }
       }
 
-      // 4. Handle Decision and Risk Management
+      // 5. Handle Decision and Risk Management
       let executedOrder = null;
       if (
         (decision.action === 'buy' || decision.action === 'sell') &&
@@ -220,7 +275,7 @@ class BacktestEngine {
         }
       }
 
-      // 5. Record Log Entry (DATA-SCHEMA.md §6)
+      // 6. Record Log Entry (DATA-SCHEMA.md §6)
       const logEntry = {
         timestamp: currentCandle.time,
         symbol: config.SYMBOL,
@@ -250,41 +305,58 @@ class BacktestEngine {
   }
 
   /**
-   * Rule-based decision evaluation using MA cross & RSI thresholds.
+   * Rule-based decision evaluation using RSI extremes, EMA cross, and candle close confirmation.
    *
    * @private
    * @param {Object} context
+   * @param {Object} currentCandle
    * @param {Object} config
+   * @param {Object} buySetup
+   * @param {Object} sellSetup
    * @param {number} defaultSlAtrMultiplier
    * @param {number} defaultTpAtrMultiplier
    * @returns {Object}
    */
-  _evaluateRuleBasedDecision(context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier) {
+  _evaluateRuleBasedDecision(
+    context,
+    currentCandle,
+    config,
+    buySetup,
+    sellSetup,
+    defaultSlAtrMultiplier,
+    defaultTpAtrMultiplier
+  ) {
     const { indicators } = context;
 
+    // BUY: RSI touched oversold (<=30) AND Bullish EMA cross occurred AND candle closed above EMA21
     if (
-      indicators.ma_cross === 'bullish_cross' &&
-      indicators.rsi < config.RSI_OVERSOLD
+      buySetup.rsiTouched &&
+      buySetup.emaCrossed &&
+      indicators.ma9 > indicators.ma21 &&
+      currentCandle.close > indicators.ma21
     ) {
       return {
         action: 'buy',
         confidence: 1.0,
         sl_atr_multiplier: defaultSlAtrMultiplier,
         tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based: Bullish cross and RSI (${indicators.rsi}) < oversold threshold (${config.RSI_OVERSOLD})`
+        reason: `Rule-based: RSI touched oversold (<= ${config.RSI_OVERSOLD}), EMA9 crossed above EMA21, and candle closed above EMA21`
       };
     }
 
+    // SELL: RSI touched overbought (>=70) AND Bearish EMA cross occurred AND candle closed below EMA21
     if (
-      indicators.ma_cross === 'bearish_cross' &&
-      indicators.rsi > config.RSI_OVERBOUGHT
+      sellSetup.rsiTouched &&
+      sellSetup.emaCrossed &&
+      indicators.ma9 < indicators.ma21 &&
+      currentCandle.close < indicators.ma21
     ) {
       return {
         action: 'sell',
         confidence: 1.0,
         sl_atr_multiplier: defaultSlAtrMultiplier,
         tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based: Bearish cross and RSI (${indicators.rsi}) > overbought threshold (${config.RSI_OVERBOUGHT})`
+        reason: `Rule-based: RSI touched overbought (>= ${config.RSI_OVERBOUGHT}), EMA9 crossed below EMA21, and candle closed below EMA21`
       };
     }
 
@@ -293,7 +365,7 @@ class BacktestEngine {
       confidence: 0.0,
       sl_atr_multiplier: defaultSlAtrMultiplier,
       tp_atr_multiplier: defaultTpAtrMultiplier,
-      reason: 'Rule-based: No entry condition met'
+      reason: 'Rule-based: Setup or candle close confirmation condition not met'
     };
   }
 }

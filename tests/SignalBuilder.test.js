@@ -47,6 +47,11 @@ describe('SignalBuilder', () => {
       const candles = generateMockCandles(25);
       
       // Mock implementations for indicators
+      MA.calculateEMA.mockImplementation((prices, period) => {
+        if (period === 9) return Array(prices.length).fill(2348.20);
+        if (period === 21) return Array(prices.length).fill(2345.80);
+        return [];
+      });
       MA.calculateSMA.mockImplementation((prices, period) => {
         if (period === 9) return Array(prices.length).fill(2348.20);
         if (period === 21) return Array(prices.length).fill(2345.80);
@@ -62,7 +67,7 @@ describe('SignalBuilder', () => {
       const result = buildContext(candles, mockConfig);
 
       // Verify the indicators were called correctly
-      expect(MA.calculateSMA).toHaveBeenCalledTimes(2);
+      expect(MA.calculateEMA).toHaveBeenCalledTimes(2);
       expect(MA.getCrossSignal).toHaveBeenCalledWith(2348.20, 2348.20, 2345.80, 2345.80);
       expect(RSI.calculate).toHaveBeenCalledTimes(1);
       expect(RSI.getZone).toHaveBeenCalledWith(32.5, 30, 70);
@@ -79,7 +84,10 @@ describe('SignalBuilder', () => {
           rsi: 32.5,
           atr: 1.85,
           ma_cross: 'bullish_cross',
-          rsi_zone: 'neutral'
+          rsi_zone: 'neutral',
+          rsi_touched_oversold: false,
+          rsi_touched_overbought: false,
+          candle_close_vs_ma21: 'above'
         },
         recentCandles: candles.slice(-5)
       });

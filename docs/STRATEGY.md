@@ -1,10 +1,10 @@
-# STRATEGY.md — XAU/USD Trading Strategy (MA + RSI + ATR + AI)
+# STRATEGY.md — XAU/USD Trading Strategy (EMA + RSI + ATR + AI)
 
 > ⚠️ This document changes frequently during strategy optimization.
 > Do not modify `ARCHITECTURE.md` when only changing parameters here — the code should only read parameters from here via config, without hardcoding.
 
-**Current version**: v1.0
-**Last updated**: 2026-08-29
+**Current version**: v1.2
+**Last updated**: 2026-08-30
 
 ---
 
@@ -12,20 +12,26 @@
 
 | Parameter | Value | Notes |
 |---|---|---|
-| MA fast | 9 | SMA or EMA — choose one consistently |
-| MA slow | 21 | |
+| MA fast | 9 | EMA (Exponential Moving Average) |
+| MA slow | 21 | EMA (Exponential Moving Average) |
 | RSI period | 14 | |
 | RSI Oversold | 30 | Below this threshold is considered oversold |
 | RSI Overbought | 70 | Above this threshold is considered overbought |
+| RSI Lookback | 20 | Number of candles to remember RSI extreme touch setup |
+| EMA Confirmation Window | 5 | Number of candles to wait for candle close across EMA21 |
 | ATR period | 14 | Used to calculate dynamic SL/TP |
 
 ## 2. Entry Logic — Rule-based (used for fast Backtest, without calling AI)
 
 Used when running `BacktestEngine` in Rule-based mode for fast testing without consuming Gemini quota:
 
-- **Bullish signal (consider buying)**: MA9 crosses above MA21 (`bullish_cross`) AND RSI < 30
-- **Bearish signal (consider selling)**: MA9 crosses below MA21 (`bearish_cross`) AND RSI > 70
-- Outside these 2 conditions: `skip`
+- **Bullish signal (consider buying)**:
+  1. RSI touched oversold (`RSI <= 30`) within the last 20 candles AND EMA9 crosses above EMA21 (`bullish_cross`) — in any order.
+  2. Candle close confirms above EMA21 (`Close > EMA21`) within 5 candles.
+- **Bearish signal (consider selling)**:
+  1. RSI touched overbought (`RSI >= 70`) within the last 20 candles AND EMA9 crosses below EMA21 (`bearish_cross`) — in any order.
+  2. Candle close confirms below EMA21 (`Close < EMA21`) within 5 candles.
+- Outside these conditions: `skip`
 
 ## 3. AI Decision Layer — Configuration
 
@@ -41,7 +47,7 @@ Used when running `BacktestEngine` in Rule-based mode for fast testing without c
 ```
 You are an expert Forex technical analyst.
 Analyze the following signal and make a trading decision for XAU/USD:
-[context: symbol, timeframe, currentPrice, indicators{ma9, ma21, rsi, atr, ma_cross}, recentCandles]
+[context: symbol, timeframe, currentPrice, indicators{ma9, ma21, rsi, atr, ma_cross, rsi_zone, rsi_touched_oversold, rsi_touched_overbought, candle_close_vs_ma21}, recentCandles]
 
 Requirement: Return JSON with the format:
 {
@@ -71,7 +77,8 @@ Full schema for input/output: see `DATA-SCHEMA.md`. Technical contracts (validat
 | Version | Date | Changes | Reason | Backtest Results |
 |---|---|---|---|---|
 | v1.0 | 2026-08-29 | Baseline: MA9/21, RSI 30/70, confidence ≥ 0.70, Default SL/TP ATR 1.5/2.5 | Initialized based on the initial implementation plan | Not run yet |
-| v1.1 | 2026-08-29 | Rule-based entry logic: RSI threshold 40/60 → 30/70 (matches Indicator Parameters) | Synchronized consistent oversold/overbought thresholds across all documents | Not run yet |
+| v1.1 | 2026-08-29 | Rule-based entry logic: RSI threshold 40/60 → 30/70 (matches Indicator Parameters) | Synchronized consistent oversold/overbought thresholds across all documents | Total Trades: 0 (Condition conflict: MA cross occurs at avg RSI 55.2/45.2, never <30 or >70) |
+| v1.2 | 2026-08-30 | Switched MA to EMA9/21, added RSI extreme touch lookback (20 candles), and candle close confirmation across EMA21 (5 candles window) | Fixed logic contradiction in v1.1 where RSI 30/70 and MA cross were mutually exclusive | Total Trades: 550, Win Rate: 38.7%, Profit Factor: 1.04, Net Profit: +$14,246.69 (+14.25%), Max Drawdown: -23.33%, Sharpe: 0.02 |
 
 > When adding a new row: increment the version, clearly state the changed parameters, the reason for the change, and the backtest results (Win rate, Profit Factor, Max Drawdown, Sharpe) to compare with the baseline.
 

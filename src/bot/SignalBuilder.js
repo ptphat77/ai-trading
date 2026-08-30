@@ -1,4 +1,4 @@
-const { calculateSMA, getCrossSignal } = require('../indicators/MA');
+const { calculateSMA, calculateEMA, getCrossSignal } = require('../indicators/MA');
 const { calculate: calculateRSI, getZone: getRSIZone } = require('../indicators/RSI');
 const { calculate: calculateATR } = require('../indicators/ATR');
 
@@ -21,9 +21,14 @@ function buildContext(candles, config) {
   const highPrices = candles.map(c => c.high);
   const lowPrices = candles.map(c => c.low);
 
-  // Calculate Moving Averages
-  const maFast = calculateSMA(closePrices, config.MA_FAST_PERIOD);
-  const maSlow = calculateSMA(closePrices, config.MA_SLOW_PERIOD);
+  // Calculate Moving Averages (EMA or SMA based on config)
+  const isEMA = (config.MA_TYPE || 'EMA').toUpperCase() === 'EMA';
+  const maFast = isEMA
+    ? calculateEMA(closePrices, config.MA_FAST_PERIOD)
+    : calculateSMA(closePrices, config.MA_FAST_PERIOD);
+  const maSlow = isEMA
+    ? calculateEMA(closePrices, config.MA_SLOW_PERIOD)
+    : calculateSMA(closePrices, config.MA_SLOW_PERIOD);
 
   // Calculate RSI
   const rsiArray = calculateRSI(closePrices, config.RSI_PERIOD);
@@ -45,8 +50,17 @@ function buildContext(candles, config) {
   const maCross = getCrossSignal(prevMAFast, latestMAFast, prevMASlow, latestMASlow);
   const rsiZone = getRSIZone(latestRSI, config.RSI_OVERSOLD, config.RSI_OVERBOUGHT);
 
+  // Lookback for RSI extreme touches in recent candles
+  const lookbackWindow = config.RSI_LOOKBACK_CANDLES || 20;
+  const recentRsiArray = rsiArray.slice(-lookbackWindow);
+  const rsiTouchedOversold = recentRsiArray.some(rsi => rsi <= config.RSI_OVERSOLD);
+  const rsiTouchedOverbought = recentRsiArray.some(rsi => rsi >= config.RSI_OVERBOUGHT);
+
   // Get the latest candle price for currentPrice
   const latestCandle = candles[candles.length - 1];
+  const candleCloseVsMa21 = latestCandle.close > latestMASlow
+    ? 'above'
+    : (latestCandle.close < latestMASlow ? 'below' : 'equal');
 
   // Get the 5 most recent candles for the context
   const recentCandles = candles.slice(-5);
@@ -61,7 +75,10 @@ function buildContext(candles, config) {
       rsi: Number(latestRSI.toFixed(2)),
       atr: Number(latestATR.toFixed(2)),
       ma_cross: maCross,
-      rsi_zone: rsiZone
+      rsi_zone: rsiZone,
+      rsi_touched_oversold: rsiTouchedOversold,
+      rsi_touched_overbought: rsiTouchedOverbought,
+      candle_close_vs_ma21: candleCloseVsMa21
     },
     recentCandles: recentCandles
   };
