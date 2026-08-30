@@ -25,6 +25,14 @@ const config = {
   RISK_PER_TRADE: parseFloat(process.env.RISK_PER_TRADE) || 0.01,
   MIN_CONFIDENCE: parseFloat(process.env.MIN_CONFIDENCE) || 0.7,
 
+  // --- Strategy Parameters (from STRATEGY.md) ---
+  MA_FAST_PERIOD: parseInt(process.env.MA_FAST_PERIOD, 10) || 9,
+  MA_SLOW_PERIOD: parseInt(process.env.MA_SLOW_PERIOD, 10) || 21,
+  RSI_PERIOD: parseInt(process.env.RSI_PERIOD, 10) || 14,
+  RSI_OVERSOLD: parseInt(process.env.RSI_OVERSOLD, 10) || 30,
+  RSI_OVERBOUGHT: parseInt(process.env.RSI_OVERBOUGHT, 10) || 70,
+  ATR_PERIOD: parseInt(process.env.ATR_PERIOD, 10) || 14,
+  
   // --- Bot ---
   LOOP_INTERVAL_MS: parseInt(process.env.LOOP_INTERVAL_MS, 10) || 300000
 };
