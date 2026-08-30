@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and adhe
 ## [Unreleased]
 
 ### Planned
-- Setup project structure, `OandaClient`, test fetching candles
+- Setup project structure, `MT5Client`, test fetching candles
 - Indicators: MA, RSI, ATR
 - `GeminiAgent` + prompt engineering
 - Main `TradingBot` logic
@@ -24,4 +24,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and adhe
 
 ### Added
 - Initialized project documentation: `PRD.md`, `PROJECT-RULES.md`, `ARCHITECTURE.md`, `STRATEGY.md`, `DATA-SCHEMA.md`, `API-CONTRACTS.md`, `CHANGELOG.md`.
-- Finalized initial implementation plan: Node.js, OANDA (Demo), Gemini AI, indicators MA9/MA21/RSI14/ATR14.
+- Finalized initial implementation plan: Node.js, MT5 (Demo), Gemini AI, indicators MA9/MA21/RSI14/ATR14.

@@ -5,15 +5,18 @@
 
 ---
 
-## 1. OANDA REST API (external)
+## 1. Broker REST API (external)
 
-**Base URL**: `OANDA_BASE_URL` from `.env` (Demo: `https://api-fxpractice.oanda.com`)
-**Auth**: Header `Authorization: Bearer {OANDA_API_KEY}`
+**Base URL**: `BROKER_BASE_URL` from `.env`
+  - Demo example: `https://api-fxpractice.youbroker.com` — set to the actual demo URL of your chosen broker.
+  - Live example: `https://api-fxtrade.yourbroker.com`
+
+**Auth**: Header `Authorization: Bearer {BROKER_API_KEY}`
 
 ### 1.1 Fetch historical candles
 
 ```
-GET /v3/accounts/{OANDA_ACCOUNT_ID}/instruments/{SYMBOL}/candles
+GET /v3/accounts/{BROKER_ACCOUNT_ID}/instruments/{SYMBOL}/candles
 ```
 
 Query params:
@@ -28,7 +31,7 @@ Response (simplified) → map to Candle schema in `DATA-SCHEMA.md`.
 ### 1.2 Place order
 
 ```
-POST /v3/accounts/{OANDA_ACCOUNT_ID}/orders
+POST /v3/accounts/{BROKER_ACCOUNT_ID}/orders
 ```
 
 Body (Market Order with SL/TP):
@@ -44,25 +47,25 @@ Body (Market Order with SL/TP):
 }
 ```
 - `units`: positive = buy, negative = sell.
-- `price` in SL/TP rounded to the precision required by OANDA for XAU_USD (check `instrument` metadata when implementing).
+- `price` in SL/TP rounded to the precision required by your broker for XAU_USD (check `instrument` metadata when implementing).
 
 ### 1.3 Check open positions
 
 ```
-GET /v3/accounts/{OANDA_ACCOUNT_ID}/openPositions
+GET /v3/accounts/{BROKER_ACCOUNT_ID}/openPositions
 ```
 → map to Position schema in `DATA-SCHEMA.md`.
 
 ### 1.4 Close position
 
 ```
-PUT /v3/accounts/{OANDA_ACCOUNT_ID}/positions/{SYMBOL}/close
+PUT /v3/accounts/{BROKER_ACCOUNT_ID}/positions/{SYMBOL}/close
 ```
 
 ### 1.5 Get account balance
 
 ```
-GET /v3/accounts/{OANDA_ACCOUNT_ID}/summary
+GET /v3/accounts/{BROKER_ACCOUNT_ID}/summary
 ```
 → get `account.balance` field.
 
@@ -111,7 +114,7 @@ Do not retry calling Gemini in the same candle cycle — if missed, wait for the
 
 ## 3. Internal Module Interfaces
 
-### `src/data/OandaClient.js`
+### `src/data/BrokerClient.js`
 ```js
 getCandles(count: number, granularity: string): Promise<Candle[]>
 getAccountBalance(): Promise<number>

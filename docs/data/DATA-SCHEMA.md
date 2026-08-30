@@ -11,9 +11,10 @@ This document defines the data structures (schema) exchanged between components 
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `OANDA_API_KEY` | string | — | OANDA API key |
-| `OANDA_ACCOUNT_ID` | string | — | OANDA Account ID |
-| `OANDA_BASE_URL` | string | `https://api-fxpractice.oanda.com` | Demo URL; change to live URL when going live |
+| `BROKER_API_KEY` | string | — | Broker API key (depends on broker) |
+| `BROKER_ACCOUNT_ID` | string | — | Broker Account ID |
+| `BROKER_BASE_URL` | string | — | Broker REST API base URL (Demo or Live, set per broker docs) |
+| `CSV_DATA_PATH` | string | `./data/candles.csv` | Path to local source-agnostic CSV file, used by `CsvDataClient` for backtest |
 | `GEMINI_API_KEY` | string | — | Gemini API key |
 | `GEMINI_MODEL` | string | — | Gemini model name, e.g. `gemini-2.5-flash` |
 | `SYMBOL` | string | `XAU_USD` | Trading symbol |
@@ -21,7 +22,7 @@ This document defines the data structures (schema) exchanged between components 
 | `RISK_PER_TRADE` | float | `0.01` | Risk % of account per trade |
 | `MIN_CONFIDENCE` | float | `0.70` | Minimum confidence threshold to enter a trade |
 
-## 2. Candle (OHLCV) — from OANDA
+## 2. Candle (OHLCV) — from Broker API
 
 ```json
 {
@@ -142,7 +143,7 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
 
 - `mode`: `"rule-based"` | `"ai-simulated"` — the backtest mode that was run (see `ARCHITECTURE.md` / `STRATEGY.md`).
 
-## 8. OANDA Position (simplified, from `getOpenPositions()`)
+## 8. Broker Position (simplified, from `getOpenPositions()`)
 
 ```json
 {

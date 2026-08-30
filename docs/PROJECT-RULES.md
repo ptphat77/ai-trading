@@ -13,7 +13,7 @@ This document finalizes the mandatory rules that must be followed throughout the
    - Gemini API timeout → `skip`
    - JSON response from Gemini fails to parse → log warning, `skip`
    - `confidence < MIN_CONFIDENCE` → `skip`
-   - Incomplete candle data (missing candles, OANDA API error) → `skip`, do not use old data to guess.
+   - Incomplete candle data (missing candles, Broker API error) → `skip`, do not use old data to guess.
 
 2. **Fully log all decisions**, including `skip`, to `logs/trade_log.jsonl`, including reasoning and context at the time of the decision (see `DATA-SCHEMA.md`).
 
@@ -26,7 +26,7 @@ This document finalizes the mandatory rules that must be followed throughout the
 ## 2. Security
 
 - The `.env` file **must never** be committed to git — it must be in `.gitignore` from the very first commit of the repo.
-- Do not log API keys (OANDA, Gemini) to the console or log files in any form.
+- Do not log API keys (Broker, Gemini) to the console or log files in any form.
 - Do not hardcode API keys or secrets in source code.
 - The `.env.example` file (containing no real values) can be committed for configuration guidance.
 
@@ -34,15 +34,15 @@ This document finalizes the mandatory rules that must be followed throughout the
 
 - **Language**: Node.js. Consistently choose CommonJS or ES Modules for the entire repo (do not mix).
 - **Naming**:
-  - Class/module file: PascalCase (`OandaClient.js`, `RiskManager.js`)
+  - Class/module file: PascalCase (`BrokerClient.js`, `RiskManager.js`)
   - Function/variable: camelCase (`calculateSMA`, `getCrossSignal`)
 - **Single Responsibility**: each module in `src/` handles exactly 1 task, according to the directory structure defined in `ARCHITECTURE.md`.
-- **Separate business logic from API calling layer**: `OandaClient.js` only calls the API and returns raw data, no SL/TP or risk calculation inside it.
+- **Separate business logic from API calling layer**: `BrokerClient.js` only calls the API and returns raw data, no SL/TP or risk calculation inside it.
 - Do not hardcode strategy logic (RSI thresholds, MA periods...) scattered throughout the code — must read via config, reference `STRATEGY.md`.
 
 ## 4. Configuration Management
 
-- All **operational** parameters (risk %, confidence threshold, Gemini model, symbol, timeframe, OANDA base URL) are read from `.env` via `src/config.js` — not hardcoded in business logic.
+- All **operational** parameters (risk %, confidence threshold, Gemini model, symbol, timeframe, Broker base URL) are read from `.env` via `src/config.js` — not hardcoded in business logic.
 - All **strategy** parameters (MA period, RSI oversold/overbought, default ATR multiplier, prompt template) are defined and versioned in `STRATEGY.md`, applied to code via config — when optimizing strategy, edit `STRATEGY.md` first, code only reads from it.
 
 ## 5. Testing / Verification
@@ -51,12 +51,12 @@ Must sequentially go through the 4 phases defined in `ARCHITECTURE.md` (Verifica
 
 1. Manual unit test (indicator + GeminiAgent with mock context)
 2. Backtest on historical data
-3. Paper Trading (OANDA Demo), monitor for at least 24-48h
+3. Paper Trading (Broker Demo account), monitor for at least 24-48h
 4. Live Trading — only after Demo is stable for ≥ 1 week
 
 ## 5a. Testing Framework
 
-**Framework**: [Jest](https://jestjs.io/) — chosen for good mock support (needed for `OandaClient` and `GeminiAgent`).
+**Framework**: [Jest](https://jestjs.io/) — chosen for good mock support (needed for `BrokerClient` and `GeminiAgent`).
 
 **Installation**:
 ```bash
@@ -69,9 +69,9 @@ npm install --save-dev jest
 - Run one file: `npx jest tests/RSI.test.js --verbose`
 
 **Mock strategy**:
-- `OandaClient` and `GeminiAgent`: use `jest.mock()` when testing `TradingBot` or any module depending on them.
+- `BrokerClient` and `GeminiAgent`: use `jest.mock()` when testing `TradingBot` or any module depending on them.
 - Indicators (`MA`, `RSI`, `ATR`): pure functions — test directly, no mock needed.
-- HTTP (`axios`): mock using `jest.mock('axios')` when testing `OandaClient`.
+- HTTP (`axios`): mock using `jest.mock('axios')` when testing `BrokerClient`.
 
 **Minimum coverage required** (see `write-test` skill):
 - All safety fallback paths of `GeminiAgent` (timeout, parse fail, low confidence) must have tests.
@@ -87,7 +87,7 @@ npm install --save-dev jest
 
 ## 7. General Error Handling
 
-- All external API calls (OANDA, Gemini) must be wrapped in `try/catch`; errors must not crash the entire bot loop.
+- All external API calls (Broker, Gemini) must be wrapped in `try/catch`; errors must not crash the entire bot loop.
 - Error logs must include: timestamp, module causing error, related context, and fallback action taken (usually `skip`).
 - No infinite retries — set a reasonable retry limit for each API call, then `skip` the current cycle.
 
