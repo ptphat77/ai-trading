@@ -335,17 +335,17 @@
     <div class="info-item"><span class="info-label">C:</span><span class="info-value" id="hud-close">--</span></div>
     <div class="info-item"><span class="info-label">CHG:</span><span class="info-value" id="hud-change">--</span></div>
     <div class="info-item"><span class="info-label">VOL:</span><span class="info-value" id="hud-vol">--</span></div>
-    <div class="info-item"><span class="info-label" style="color: var(--ema-fast-color)">EMA9:</span><span class="info-value" id="hud-ema-fast">--</span></div>
-    <div class="info-item"><span class="info-label" style="color: var(--ema-slow-color)">EMA21:</span><span class="info-value" id="hud-ema-slow">--</span></div>
-    <div class="info-item"><span class="info-label" style="color: var(--rsi-color)">RSI14:</span><span class="info-value" id="hud-rsi">--</span></div>
-    <div class="info-item"><span class="info-label" style="color: var(--atr-color)">ATR14:</span><span class="info-value" id="hud-atr">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--ema-fast-color)" id="hud-ema-fast-label">EMA50:</span><span class="info-value" id="hud-ema-fast">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--ema-slow-color)" id="hud-ema-slow-label">EMA200:</span><span class="info-value" id="hud-ema-slow">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--rsi-color)" id="hud-rsi-label">RSI14:</span><span class="info-value" id="hud-rsi">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--atr-color)" id="hud-atr-label">ATR14:</span><span class="info-value" id="hud-atr">--</span></div>
   </div>
 
   <!-- Chart Viewport Panels -->
   <div class="chart-container" id="chart-viewport">
-    <!-- Main Panel: Candlestick + EMA9 + EMA21 -->
+    <!-- Main Panel: Candlestick + EMA50 + EMA200 -->
     <div class="panel-wrapper main-panel" id="main-panel-wrapper">
-      <div class="panel-title-badge" id="main-badge">XAU/USD • EMA 9 / 21</div>
+      <div class="panel-title-badge" id="main-badge">XAU/USD • EMA 50 / 200</div>
       <div id="chart-main" class="chart-div"></div>
     </div>
 
@@ -382,6 +382,7 @@
     let candleSeries, emaFastSeries, emaSlowSeries, rsiSeries, atrSeries;
     let isSyncingRange = false;
     let isSyncingCrosshair = false;
+    let runtimeConfig = { symbol: 'XAU_USD', timeframe: 'M5', maFast: 50, maSlow: 200, rsiPeriod: 14, atrPeriod: 14, rsiOversold: 30, rsiOverbought: 70 };
 
     // Fixed right scale width to guarantee 100% pixel-perfect horizontal alignment across all 3 charts
     const PRICE_SCALE_WIDTH = 85;
@@ -662,7 +663,7 @@
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: true,
-        title: 'EMA 9',
+        title: `EMA ${runtimeConfig.maFast || 50}`,
       });
 
       emaSlowSeries = chartMain.addLineSeries({
@@ -670,7 +671,7 @@
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: true,
-        title: 'EMA 21',
+        title: `EMA ${runtimeConfig.maSlow || 200}`,
       });
 
       // 2. RSI Chart (Hide its own time scale)
@@ -836,21 +837,32 @@
       document.getElementById('hud-rsi').textContent = rsi !== undefined ? rsiFormatter.format(rsi) : '--';
       document.getElementById('hud-atr').textContent = atr !== undefined ? atrFormatter.format(atr) : '--';
 
+      const fastP = runtimeConfig.maFast || 50;
+      const slowP = runtimeConfig.maSlow || 200;
+      const rsiP = runtimeConfig.rsiPeriod || 14;
+      const atrP = runtimeConfig.atrPeriod || 14;
+
+      document.getElementById('hud-ema-fast-label').textContent = `EMA${fastP}:`;
+      document.getElementById('hud-ema-slow-label').textContent = `EMA${slowP}:`;
+      document.getElementById('hud-rsi-label').textContent = `RSI${rsiP}:`;
+      document.getElementById('hud-atr-label').textContent = `ATR${atrP}:`;
+
       // Update Individual Panel Badges directly
       const emaFastStr = emaFast !== undefined ? priceFormatter.format(emaFast) : '--';
       const emaSlowStr = emaSlow !== undefined ? priceFormatter.format(emaSlow) : '--';
-      document.getElementById('main-badge').innerHTML = `XAU/USD • EMA 9: <span style="color:var(--ema-fast-color)">${emaFastStr}</span> | EMA 21: <span style="color:var(--ema-slow-color)">${emaSlowStr}</span>`;
+      const symbolDisp = (runtimeConfig.symbol || 'XAU_USD').replace('_', '/');
+      document.getElementById('main-badge').innerHTML = `${symbolDisp} • EMA ${fastP}: <span style="color:var(--ema-fast-color)">${emaFastStr}</span> | EMA ${slowP}: <span style="color:var(--ema-slow-color)">${emaSlowStr}</span>`;
 
       const rsiStr = rsi !== undefined ? rsiFormatter.format(rsi) : '--';
       let rsiColor = 'var(--rsi-color)';
       if (rsi !== undefined) {
-        if (rsi >= 70) rsiColor = 'var(--bearish-color)';
-        else if (rsi <= 30) rsiColor = 'var(--bullish-color)';
+        if (rsi >= (runtimeConfig.rsiOverbought || 70)) rsiColor = 'var(--bearish-color)';
+        else if (rsi <= (runtimeConfig.rsiOversold || 30)) rsiColor = 'var(--bullish-color)';
       }
-      document.getElementById('rsi-badge').innerHTML = `RSI (14): <span style="color:${rsiColor}; font-weight:700;">${rsiStr}</span> • OB 70 / OS 30`;
+      document.getElementById('rsi-badge').innerHTML = `RSI (${rsiP}): <span style="color:${rsiColor}; font-weight:700;">${rsiStr}</span> • OB ${runtimeConfig.rsiOverbought || 70} / OS ${runtimeConfig.rsiOversold || 30}`;
 
       const atrStr = atr !== undefined ? atrFormatter.format(atr) : '--';
-      document.getElementById('atr-badge').innerHTML = `ATR (14): <span style="color:var(--atr-color); font-weight:700;">${atrStr}</span>`;
+      document.getElementById('atr-badge').innerHTML = `ATR (${atrP}): <span style="color:var(--atr-color); font-weight:700;">${atrStr}</span>`;
     }
 
     function showLatestHUD() {
@@ -870,12 +882,26 @@
           const cfgRes = await fetch('/api/config');
           if (cfgRes.ok) {
             const cfg = await cfgRes.json();
+            runtimeConfig = { ...runtimeConfig, ...cfg };
             if (cfg.symbol) document.getElementById('symbol-display').textContent = cfg.symbol.replace('_', '/');
             if (cfg.timeframe) document.getElementById('tf-display').textContent = cfg.timeframe;
           }
         } catch (e) {
           console.warn('Config fetch skipped:', e);
         }
+
+        const fastP = runtimeConfig.maFast || 50;
+        const slowP = runtimeConfig.maSlow || 200;
+        const rsiP = runtimeConfig.rsiPeriod || 14;
+        const atrP = runtimeConfig.atrPeriod || 14;
+
+        if (emaFastSeries) emaFastSeries.applyOptions({ title: `EMA ${fastP}` });
+        if (emaSlowSeries) emaSlowSeries.applyOptions({ title: `EMA ${slowP}` });
+        if (rsiSeries) rsiSeries.applyOptions({ title: `RSI ${rsiP}` });
+        if (atrSeries) atrSeries.applyOptions({ title: `ATR ${atrP}` });
+
+        document.getElementById('hud-ema-fast-label').textContent = `EMA${fastP}:`;
+        document.getElementById('hud-ema-slow-label').textContent = `EMA${slowP}:`;
 
         subtext.textContent = 'Downloading candles CSV...';
         const res = await fetch('/api/candles');
@@ -899,10 +925,10 @@
         document.getElementById('tf-display').textContent = detectedTf;
 
         // Calculate Indicators with Whitespace alignment
-        emaFastData = calculateEMA(candleData, 9);
-        emaSlowData = calculateEMA(candleData, 21);
-        rsiData = calculateRSI(candleData, 14);
-        atrData = calculateATR(candleData, 14);
+        emaFastData = calculateEMA(candleData, fastP);
+        emaSlowData = calculateEMA(candleData, slowP);
+        rsiData = calculateRSI(candleData, rsiP);
+        atrData = calculateATR(candleData, atrP);
 
         // Build Fast Lookup Map for HUD
         const emaFastMap = new Map(emaFastData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));

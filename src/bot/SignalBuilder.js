@@ -70,6 +70,8 @@ function buildContext(candles, config) {
     timeframe: config.TIMEFRAME,
     currentPrice: latestCandle.close,
     indicators: {
+      ma_fast: Number(latestMAFast.toFixed(2)),
+      ma_slow: Number(latestMASlow.toFixed(2)),
       ma9: Number(latestMAFast.toFixed(2)),
       ma21: Number(latestMASlow.toFixed(2)),
       rsi: Number(latestRSI.toFixed(2)),
@@ -78,7 +80,8 @@ function buildContext(candles, config) {
       rsi_zone: rsiZone,
       rsi_touched_oversold: rsiTouchedOversold,
       rsi_touched_overbought: rsiTouchedOverbought,
-      candle_close_vs_ma21: candleCloseVsMa21
+      candle_close_vs_ma21: candleCloseVsMa21,
+      candle_close_vs_ma_slow: candleCloseVsMa21
     },
     recentCandles: recentCandles
   };

@@ -20,10 +20,44 @@ class CsvDataClient {
     this.loaded = false;
   }
 
+  _parseDateTime(dateStr, timeStr) {
+    try {
+      let combined = (dateStr || '').trim();
+      if (timeStr) combined += ' ' + (timeStr || '').trim();
+      const parts = combined.split(/[\sT]+/);
+      const dPart = parts[0];
+      const tPart = parts[1] || '00:00:00';
+
+      let year, month, day;
+      const dTokens = dPart.split(/[\.\/\-]/).map(Number);
+      if (dTokens.length < 3 || isNaN(dTokens[0]) || isNaN(dTokens[1]) || isNaN(dTokens[2])) {
+        return null;
+      }
+
+      if (dTokens[0] > 1000) {
+        [year, month, day] = dTokens;
+      } else if (dTokens[2] > 1000) {
+        [day, month, year] = dTokens;
+      } else {
+        [year, month, day] = dTokens;
+      }
+
+      const tTokens = tPart.split(':').map(Number);
+      const hour = isNaN(tTokens[0]) ? 0 : tTokens[0];
+      const min = isNaN(tTokens[1]) ? 0 : tTokens[1];
+      const sec = isNaN(tTokens[2]) ? 0 : tTokens[2];
+
+      const dt = new Date(Date.UTC(year, month - 1, day, hour, min, sec));
+      if (isNaN(dt.getTime())) return null;
+      return dt.toISOString();
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Loads and parses the CSV file into memory.
-   * Expected format: <DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL> <VOL> <SPREAD>
-   * Delimiter: Tab (\t)
+   * Handles UTF-8, UTF-16LE, tabs, commas, and varied column formats.
    */
   async _loadData() {
     if (this.loaded) return;
@@ -32,33 +66,67 @@ class CsvDataClient {
       throw new Error(`CSV data file not found at: ${this.csvPath}`);
     }
 
-    const fileContent = fs.readFileSync(this.csvPath, 'utf8');
-    const lines = fileContent.trim().split('\n');
+    const buf = fs.readFileSync(this.csvPath);
+    let text;
+    if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) {
+      text = buf.toString('utf16le');
+    } else {
+      text = buf.toString('utf8');
+    }
 
-    // Skip header (line 0)
-    for (let i = 1; i < lines.length; i++) {
+    if (text.charCodeAt(0) === 0xfeff) {
+      text = text.slice(1);
+    }
+
+    const lines = text.trim().split(/\r?\n/);
+    this.candles = [];
+
+    for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
 
-      const parts = line.split('\t');
-      if (parts.length < 7) continue;
+      let delim = ',';
+      if (line.includes('\t')) delim = '\t';
+      else if (line.includes(';')) delim = ';';
 
-      const datePart = parts[0]; // e.g. 2025.09.01
-      const timePart = parts[1]; // e.g. 01:05:00
+      const parts = line.split(delim).map(s => s.trim().replace(/^["']|["']$/g, ''));
+      if (parts.length < 5) continue;
 
-      // Convert 2025.09.01 → 2025-09-01T01:05:00Z
-      const isoDateStr = `${datePart.replace(/\./g, '-')}T${timePart}Z`;
+      let isoTime, open, high, low, close, vol;
+
+      if (parts[0].includes(' ') || parts[0].includes('T')) {
+        isoTime = this._parseDateTime(parts[0]);
+        open = parseFloat(parts[1]);
+        high = parseFloat(parts[2]);
+        low = parseFloat(parts[3]);
+        close = parseFloat(parts[4]);
+        vol = parseInt(parts[5] || 0, 10);
+      } else if (parts.length >= 6 && parts[1].includes(':')) {
+        isoTime = this._parseDateTime(parts[0], parts[1]);
+        open = parseFloat(parts[2]);
+        high = parseFloat(parts[3]);
+        low = parseFloat(parts[4]);
+        close = parseFloat(parts[5]);
+        vol = parseInt(parts[6] || 0, 10);
+      } else {
+        continue;
+      }
+
+      if (!isoTime || isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+        continue; // skip header or unparsable row
+      }
 
       this.candles.push({
-        time: new Date(isoDateStr).toISOString(),
-        open: parseFloat(parts[2]),
-        high: parseFloat(parts[3]),
-        low: parseFloat(parts[4]),
-        close: parseFloat(parts[5]),
-        volume: parseInt(parts[6], 10)
+        time: isoTime,
+        open,
+        high,
+        low,
+        close,
+        volume: isNaN(vol) ? 0 : vol
       });
     }
 
+    this.candles.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
     this.loaded = true;
   }
 

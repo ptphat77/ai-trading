@@ -79,6 +79,8 @@ describe('SignalBuilder', () => {
         timeframe: 'M5',
         currentPrice: candles[24].close, // latest candle
         indicators: {
+          ma_fast: 2348.20,
+          ma_slow: 2345.80,
           ma9: 2348.20,
           ma21: 2345.80,
           rsi: 32.5,
@@ -87,7 +89,8 @@ describe('SignalBuilder', () => {
           rsi_zone: 'neutral',
           rsi_touched_oversold: false,
           rsi_touched_overbought: false,
-          candle_close_vs_ma21: 'above'
+          candle_close_vs_ma21: 'above',
+          candle_close_vs_ma_slow: 'above'
         },
         recentCandles: candles.slice(-5)
       });
