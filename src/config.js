@@ -40,7 +40,10 @@ const config = {
   DEFAULT_TP_ATR_MULTIPLIER: parseFloat(process.env.DEFAULT_TP_ATR_MULTIPLIER) || 2.5,
   
   // --- Bot ---
-  LOOP_INTERVAL_MS: parseInt(process.env.LOOP_INTERVAL_MS, 10) || 300000
+  LOOP_INTERVAL_MS: parseInt(process.env.LOOP_INTERVAL_MS, 10) || 300000,
+
+  // --- Chart Viewer ---
+  CHART_PORT: parseInt(process.env.CHART_PORT, 10) || 3400
 };
 
 module.exports = Object.freeze(config);

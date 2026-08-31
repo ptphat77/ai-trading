@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node scripts/run_live.js",
     "backtest": "node scripts/run_backtest.js",
+    "chart": "node scripts/chart_viewer/serve.js",
     "test": "npx jest"
   },
   "dependencies": {

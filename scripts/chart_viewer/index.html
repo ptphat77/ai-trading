@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forex Chart Viewer • TradeBot Gemini</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    :root {
+      --bg-primary: #131722;
+      --bg-secondary: #1e222d;
+      --bg-tertiary: #2a2e39;
+      --border-color: #2b2f3a;
+      --text-primary: #e0e3eb;
+      --text-secondary: #868993;
+      --text-muted: #5d606b;
+      
+      --bullish-color: #089981;
+      --bearish-color: #f23645;
+      --ema-fast-color: #00bcd4;
+      --ema-slow-color: #ff9800;
+      --rsi-color: #ba68c8;
+      --atr-color: #ffb74d;
+      --accent-color: #2962ff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* --- Header Bar --- */
+    header {
+      background: rgba(30, 34, 45, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .title-group {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .symbol-name {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .timeframe-badge {
+      background: rgba(41, 98, 255, 0.2);
+      color: #82b1ff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(41, 98, 255, 0.35);
+      text-transform: uppercase;
+    }
+
+    .source-info {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      max-width: 380px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .indicators-legend {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.78rem;
+      background: var(--bg-primary);
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dot.ema-fast { background-color: var(--ema-fast-color); box-shadow: 0 0 6px rgba(0, 188, 212, 0.6); }
+    .dot.ema-slow { background-color: var(--ema-slow-color); box-shadow: 0 0 6px rgba(255, 152, 0, 0.6); }
+    .dot.rsi { background-color: var(--rsi-color); }
+    .dot.atr { background-color: var(--atr-color); }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .fit-btn {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.15s ease;
+    }
+
+    .fit-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* --- Crosshair Info HUD Bar --- */
+    .info-bar {
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 6px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      flex-shrink: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .info-item {
+      display: flex;
+      gap: 5px;
+    }
+
+    .info-label {
+      color: var(--text-muted);
+    }
+
+    .info-value {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .info-value.bullish { color: var(--bullish-color); }
+    .info-value.bearish { color: var(--bearish-color); }
+
+    /* --- Chart Viewport Panels --- */
+    .chart-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background-color: var(--bg-primary);
+      min-height: 0;
+    }
+
+    .panel-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .panel-wrapper.main-panel {
+      flex: 62;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .panel-wrapper.sub-panel {
+      flex: 19;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .panel-wrapper.sub-panel:last-child {
+      border-bottom: none;
+    }
+
+    .panel-title-badge {
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      z-index: 5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 4px;
+      background: rgba(30, 34, 45, 0.82);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .chart-div {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* --- Loading / Overlay State --- */
+    .overlay-message {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(19, 23, 34, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 100;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(41, 98, 255, 0.2);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-card {
+      background: #28191d;
+      border: 1px solid #772b35;
+      padding: 20px 24px;
+      border-radius: 8px;
+      max-width: 580px;
+      text-align: left;
+    }
+
+    .error-card h3 {
+      color: #ff5252;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .error-card p {
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: #ffcdd2;
+    }
+
+    .error-card code {
+      background: rgba(0, 0, 0, 0.4);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="header-left">
+      <div class="title-group">
+        <span class="symbol-name" id="symbol-display">XAU/USD</span>
+        <span class="timeframe-badge" id="tf-display">M5</span>
+      </div>
+      <div class="indicators-legend">
+        <div class="legend-item"><span class="dot ema-fast"></span>EMA 9</div>
+        <div class="legend-item"><span class="dot ema-slow"></span>EMA 21</div>
+        <div class="legend-item"><span class="dot rsi"></span>RSI 14 (30/70)</div>
+        <div class="legend-item"><span class="dot atr"></span>ATR 14</div>
+      </div>
+      <span class="source-info" id="candles-count">Loading data...</span>
+    </div>
+
+    <div class="header-right">
+      <button class="fit-btn" onclick="resetZoom()">Fit All Candles</button>
+    </div>
+  </header>
+
+  <!-- Crosshair Info HUD Bar -->
+  <div class="info-bar" id="info-bar">
+    <div class="info-item"><span class="info-label">TIME:</span><span class="info-value" id="hud-time">--</span></div>
+    <div class="info-item"><span class="info-label">O:</span><span class="info-value" id="hud-open">--</span></div>
+    <div class="info-item"><span class="info-label">H:</span><span class="info-value" id="hud-high">--</span></div>
+    <div class="info-item"><span class="info-label">L:</span><span class="info-value" id="hud-low">--</span></div>
+    <div class="info-item"><span class="info-label">C:</span><span class="info-value" id="hud-close">--</span></div>
+    <div class="info-item"><span class="info-label">CHG:</span><span class="info-value" id="hud-change">--</span></div>
+    <div class="info-item"><span class="info-label">VOL:</span><span class="info-value" id="hud-vol">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--ema-fast-color)">EMA9:</span><span class="info-value" id="hud-ema-fast">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--ema-slow-color)">EMA21:</span><span class="info-value" id="hud-ema-slow">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--rsi-color)">RSI14:</span><span class="info-value" id="hud-rsi">--</span></div>
+    <div class="info-item"><span class="info-label" style="color: var(--atr-color)">ATR14:</span><span class="info-value" id="hud-atr">--</span></div>
+  </div>
+
+  <!-- Chart Viewport Panels -->
+  <div class="chart-container" id="chart-viewport">
+    <!-- Main Panel: Candlestick + EMA9 + EMA21 -->
+    <div class="panel-wrapper main-panel" id="main-panel-wrapper">
+      <div class="panel-title-badge" id="main-badge">XAU/USD • EMA 9 / 21</div>
+      <div id="chart-main" class="chart-div"></div>
+    </div>
+
+    <!-- RSI Sub-panel -->
+    <div class="panel-wrapper sub-panel" id="rsi-panel-wrapper">
+      <div class="panel-title-badge" id="rsi-badge" style="color: var(--rsi-color);">RSI (14) • OB 70 / OS 30</div>
+      <div id="chart-rsi" class="chart-div"></div>
+    </div>
+
+    <!-- ATR Sub-panel -->
+    <div class="panel-wrapper sub-panel" id="atr-panel-wrapper">
+      <div class="panel-title-badge" id="atr-badge" style="color: var(--atr-color);">ATR (14)</div>
+      <div id="chart-atr" class="chart-div"></div>
+    </div>
+
+    <!-- Overlay Loader -->
+    <div class="overlay-message" id="loader-overlay">
+      <div class="spinner"></div>
+      <h3 style="font-weight: 600;">Loading Candle Data...</h3>
+      <p style="color: var(--text-secondary); font-size: 0.85rem;" id="loading-subtext">Fetching CSV from server...</p>
+    </div>
+  </div>
+
+  <script>
+    // --- State Variables ---
+    let candleData = [];
+    let emaFastData = [];
+    let emaSlowData = [];
+    let rsiData = [];
+    let atrData = [];
+    let lookupMap = new Map(); // timestamp -> { candle, emaFast, emaSlow, rsi, atr }
+
+    let chartMain, chartRsi, chartAtr;
+    let candleSeries, emaFastSeries, emaSlowSeries, rsiSeries, atrSeries;
+    let isSyncingRange = false;
+    let isSyncingCrosshair = false;
+
+    // Fixed right scale width to guarantee 100% pixel-perfect horizontal alignment across all 3 charts
+    const PRICE_SCALE_WIDTH = 85;
+
+    // --- Formatters ---
+    const priceFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const rsiFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const atrFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function formatTime(unixSec) {
+      const d = new Date(unixSec * 1000);
+      const Y = d.getUTCFullYear();
+      const M = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const D = String(d.getUTCDate()).padStart(2, '0');
+      const h = String(d.getUTCHours()).padStart(2, '0');
+      const m = String(d.getUTCMinutes()).padStart(2, '0');
+      return `${Y}-${M}-${D} ${h}:${m} UTC`;
+    }
+
+    // --- 1. Indicator Calculations with Whitespace Alignment ---
+    function calculateEMA(candles, period) {
+      if (!candles || candles.length < period) return [];
+      const multiplier = 2 / (period + 1);
+      const results = [];
+
+      // Add whitespace for uncalculated leading bars so time indices match exactly
+      for (let i = 0; i < period - 1; i++) {
+        results.push({ time: candles[i].time });
+      }
+
+      let sum = 0;
+      for (let i = 0; i < period; i++) {
+        sum += candles[i].close;
+      }
+      let prevEMA = sum / period;
+      results.push({ time: candles[period - 1].time, value: prevEMA });
+
+      for (let i = period; i < candles.length; i++) {
+        const currentClose = candles[i].close;
+        const ema = (currentClose - prevEMA) * multiplier + prevEMA;
+        results.push({ time: candles[i].time, value: ema });
+        prevEMA = ema;
+      }
+      return results;
+    }
+
+    function calculateRSI(candles, period = 14) {
+      if (!candles || candles.length <= period) return [];
+      const results = [];
+
+      // Add whitespace for uncalculated leading bars so time indices match exactly
+      for (let i = 0; i < period; i++) {
+        results.push({ time: candles[i].time });
+      }
+
+      let gains = 0;
+      let losses = 0;
+
+      for (let i = 1; i <= period; i++) {
+        const change = candles[i].close - candles[i - 1].close;
+        if (change > 0) gains += change;
+        else losses += Math.abs(change);
+      }
+
+      let avgGain = gains / period;
+      let avgLoss = losses / period;
+
+      let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      let rsi = 100 - (100 / (1 + rs));
+      results.push({ time: candles[period].time, value: rsi });
+
+      for (let i = period + 1; i < candles.length; i++) {
+        const change = candles[i].close - candles[i - 1].close;
+        const currentGain = change > 0 ? change : 0;
+        const currentLoss = change < 0 ? Math.abs(change) : 0;
+
+        avgGain = (avgGain * (period - 1) + currentGain) / period;
+        avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
+
+        rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        rsi = 100 - (100 / (1 + rs));
+        results.push({ time: candles[i].time, value: rsi });
+      }
+      return results;
+    }
+
+    function calculateATR(candles, period = 14) {
+      if (!candles || candles.length <= period) return [];
+      const results = [];
+
+      // Add whitespace for uncalculated leading bars so time indices match exactly
+      for (let i = 0; i < period; i++) {
+        results.push({ time: candles[i].time });
+      }
+
+      function getTR(curr, prev) {
+        if (!prev) return curr.high - curr.low;
+        return Math.max(
+          curr.high - curr.low,
+          Math.abs(curr.high - prev.close),
+          Math.abs(curr.low - prev.close)
+        );
+      }
+
+      let trSum = 0;
+      for (let i = 1; i <= period; i++) {
+        trSum += getTR(candles[i], candles[i - 1]);
+      }
+
+      let prevATR = trSum / period;
+      results.push({ time: candles[period].time, value: prevATR });
+
+      for (let i = period + 1; i < candles.length; i++) {
+        const tr = getTR(candles[i], candles[i - 1]);
+        const atr = (prevATR * (period - 1) + tr) / period;
+        results.push({ time: candles[i].time, value: atr });
+        prevATR = atr;
+      }
+      return results;
+    }
+
+    // --- 2. Robust CSV Parser & Date Parser ---
+    function parseDateTime(dateStr, timeStr) {
+      let combined = dateStr.trim();
+      if (timeStr) combined += ' ' + timeStr.trim();
+      const parts = combined.split(/[\sT]+/);
+      const dPart = parts[0];
+      const tPart = parts[1] || '00:00:00';
+
+      let year, month, day;
+      const dTokens = dPart.split(/[\.\/\-]/).map(Number);
+      if (dTokens[0] > 1000) {
+        [year, month, day] = dTokens;
+      } else if (dTokens[2] > 1000) {
+        [day, month, year] = dTokens;
+      } else {
+        [year, month, day] = dTokens;
+      }
+
+      const tTokens = tPart.split(':').map(Number);
+      const hour = tTokens[0] || 0;
+      const min = tTokens[1] || 0;
+      const sec = tTokens[2] || 0;
+
+      return Date.UTC(year, month - 1, day, hour, min, sec) / 1000;
+    }
+
+    function parseCSV(text) {
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const lines = text.trim().split(/\r?\n/);
+      const candles = [];
+      const seenTimes = new Set();
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Auto-detect delimiter: comma, tab, or semicolon
+        let delim = ',';
+        if (line.includes('\t')) delim = '\t';
+        else if (line.includes(';')) delim = ';';
+
+        const parts = line.split(delim).map(s => s.trim().replace(/^["']|["']$/g, ''));
+        if (parts.length < 5) continue;
+
+        let timeSec, open, high, low, close, vol;
+
+        // Case 1: First col contains both Date & Time (e.g. 2025.03.10 01:00)
+        if (parts[0].includes(' ') || parts[0].includes('T')) {
+          timeSec = parseDateTime(parts[0]);
+          open = parseFloat(parts[1]);
+          high = parseFloat(parts[2]);
+          low = parseFloat(parts[3]);
+          close = parseFloat(parts[4]);
+          vol = parseInt(parts[5] || 0, 10);
+        } else if (parts.length >= 6 && parts[1].includes(':')) {
+          // Case 2: col 0 is Date, col 1 is Time (e.g. 2025.09.01 \t 01:05:00)
+          timeSec = parseDateTime(parts[0], parts[1]);
+          open = parseFloat(parts[2]);
+          high = parseFloat(parts[3]);
+          low = parseFloat(parts[4]);
+          close = parseFloat(parts[5]);
+          vol = parseInt(parts[6] || 0, 10);
+        } else {
+          continue;
+        }
+
+        if (isNaN(timeSec) || isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+          continue; // Skip header or invalid line
+        }
+
+        if (!seenTimes.has(timeSec)) {
+          seenTimes.add(timeSec);
+          candles.push({ time: timeSec, open, high, low, close, volume: isNaN(vol) ? 0 : vol });
+        }
+      }
+
+      candles.sort((a, b) => a.time - b.time);
+      return candles;
+    }
+
+    function detectTimeframe(candles) {
+      if (!candles || candles.length < 2) return 'M5';
+      const diffSec = candles[1].time - candles[0].time;
+      if (diffSec === 60) return 'M1';
+      if (diffSec === 300) return 'M5';
+      if (diffSec === 900) return 'M15';
+      if (diffSec === 1800) return 'M30';
+      if (diffSec === 3600) return 'H1';
+      if (diffSec === 14400) return 'H4';
+      if (diffSec === 86400) return 'D1';
+      return `${Math.round(diffSec / 60)}M`;
+    }
+
+    // --- 3. Chart Setup & Initialization ---
+    const chartBaseOptions = {
+      layout: {
+        background: { type: 'solid', color: '#131722' },
+        textColor: '#868993',
+        fontSize: 11,
+        fontFamily: "'JetBrains Mono', monospace",
+      },
+      grid: {
+        vertLines: { color: 'rgba(42, 46, 57, 0.4)' },
+        horzLines: { color: 'rgba(42, 46, 57, 0.4)' },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: {
+          color: 'rgba(130, 177, 255, 0.45)',
+          width: 1,
+          style: LightweightCharts.LineStyle.Dashed,
+          labelBackgroundColor: '#1e222d',
+        },
+        horzLine: {
+          color: 'rgba(130, 177, 255, 0.45)',
+          width: 1,
+          style: LightweightCharts.LineStyle.Dashed,
+          labelBackgroundColor: '#1e222d',
+        },
+      },
+      rightPriceScale: {
+        borderColor: '#2b2f3a',
+        minimumWidth: PRICE_SCALE_WIDTH,
+      },
+    };
+
+    function initCharts() {
+      const mainEl = document.getElementById('chart-main');
+      const rsiEl = document.getElementById('chart-rsi');
+      const atrEl = document.getElementById('chart-atr');
+
+      // 1. Main Candlestick Chart (Hide its own time scale to align with sub-panels)
+      chartMain = LightweightCharts.createChart(mainEl, {
+        ...chartBaseOptions,
+        timeScale: {
+          visible: false, // TimeScale only shown on the bottom ATR chart
+          borderColor: '#2b2f3a',
+        },
+        rightPriceScale: {
+          ...chartBaseOptions.rightPriceScale,
+          autoScale: true,
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+      });
+
+      candleSeries = chartMain.addCandlestickSeries({
+        upColor: '#089981',
+        downColor: '#f23645',
+        borderUpColor: '#089981',
+        borderDownColor: '#f23645',
+        wickUpColor: '#089981',
+        wickDownColor: '#f23645',
+      });
+
+      emaFastSeries = chartMain.addLineSeries({
+        color: '#00bcd4',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: 'EMA 9',
+      });
+
+      emaSlowSeries = chartMain.addLineSeries({
+        color: '#ff9800',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: 'EMA 21',
+      });
+
+      // 2. RSI Chart (Hide its own time scale)
+      chartRsi = LightweightCharts.createChart(rsiEl, {
+        ...chartBaseOptions,
+        timeScale: {
+          visible: false,
+          borderColor: '#2b2f3a',
+        },
+        rightPriceScale: {
+          ...chartBaseOptions.rightPriceScale,
+          scaleMargins: { top: 0.15, bottom: 0.15 },
+        },
+      });
+
+      rsiSeries = chartRsi.addLineSeries({
+        color: '#ba68c8',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: 'RSI 14',
+      });
+
+      // RSI Overbought & Oversold Horizontal Lines
+      rsiSeries.createPriceLine({ price: 70, color: 'rgba(242, 54, 69, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'OB 70' });
+      rsiSeries.createPriceLine({ price: 50, color: 'rgba(134, 137, 147, 0.3)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: false });
+      rsiSeries.createPriceLine({ price: 30, color: 'rgba(8, 153, 129, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'OS 30' });
+
+      // 3. ATR Chart (Visible bottom time scale)
+      chartAtr = LightweightCharts.createChart(atrEl, {
+        ...chartBaseOptions,
+        timeScale: {
+          visible: true, // Only bottom panel displays the time scale
+          timeVisible: true,
+          secondsVisible: false,
+          borderColor: '#2b2f3a',
+        },
+        rightPriceScale: {
+          ...chartBaseOptions.rightPriceScale,
+          scaleMargins: { top: 0.15, bottom: 0.15 },
+        },
+      });
+
+      atrSeries = chartAtr.addLineSeries({
+        color: '#ffb74d',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: 'ATR 14',
+      });
+
+      // --- Synchronize Logical Time Ranges across all 3 charts ---
+      const charts = [chartMain, chartRsi, chartAtr];
+
+      charts.forEach((chart, idx) => {
+        chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
+          if (isSyncingRange || !logicalRange) return;
+          isSyncingRange = true;
+          charts.forEach((otherChart, otherIdx) => {
+            if (idx !== otherIdx) {
+              otherChart.timeScale().setVisibleLogicalRange(logicalRange);
+            }
+          });
+          isSyncingRange = false;
+        });
+      });
+
+      // --- Synchronize Crosshairs Across All 3 Panels on Hover ---
+      function syncCrosshair(sourceChart, param) {
+        if (isSyncingCrosshair) return;
+        isSyncingCrosshair = true;
+
+        if (!param || !param.time || !lookupMap.has(param.time)) {
+          showLatestHUD();
+          if (sourceChart !== chartMain && chartMain) chartMain.clearCrosshairPosition();
+          if (sourceChart !== chartRsi && chartRsi) chartRsi.clearCrosshairPosition();
+          if (sourceChart !== chartAtr && chartAtr) chartAtr.clearCrosshairPosition();
+          isSyncingCrosshair = false;
+          return;
+        }
+
+        const t = param.time;
+        const data = lookupMap.get(t);
+        updateHUD(data);
+
+        // Sync crosshair to Main Chart
+        if (sourceChart !== chartMain && chartMain && data.candle) {
+          chartMain.setCrosshairPosition(data.candle.close, t, candleSeries);
+        }
+
+        // Sync crosshair to RSI Chart
+        if (sourceChart !== chartRsi && chartRsi) {
+          const rsiVal = data.rsi !== undefined ? data.rsi : 50;
+          chartRsi.setCrosshairPosition(rsiVal, t, rsiSeries);
+        }
+
+        // Sync crosshair to ATR Chart
+        if (sourceChart !== chartAtr && chartAtr) {
+          const atrVal = data.atr !== undefined ? data.atr : 0;
+          chartAtr.setCrosshairPosition(atrVal, t, atrSeries);
+        }
+
+        isSyncingCrosshair = false;
+      }
+
+      chartMain.subscribeCrosshairMove((param) => syncCrosshair(chartMain, param));
+      chartRsi.subscribeCrosshairMove((param) => syncCrosshair(chartRsi, param));
+      chartAtr.subscribeCrosshairMove((param) => syncCrosshair(chartAtr, param));
+
+      // Clear crosshair on mouse leave
+      const viewportEl = document.getElementById('chart-viewport');
+      viewportEl.addEventListener('mouseleave', () => {
+        if (chartMain) chartMain.clearCrosshairPosition();
+        if (chartRsi) chartRsi.clearCrosshairPosition();
+        if (chartAtr) chartAtr.clearCrosshairPosition();
+        showLatestHUD();
+      });
+
+      // Resize observer
+      const resizeObserver = new ResizeObserver(() => {
+        resizeAllCharts();
+      });
+
+      resizeObserver.observe(viewportEl);
+    }
+
+    function resizeAllCharts() {
+      const mainEl = document.getElementById('chart-main');
+      const rsiEl = document.getElementById('chart-rsi');
+      const atrEl = document.getElementById('chart-atr');
+
+      if (chartMain && mainEl) chartMain.applyOptions({ width: mainEl.clientWidth, height: mainEl.clientHeight });
+      if (chartRsi && rsiEl) chartRsi.applyOptions({ width: rsiEl.clientWidth, height: rsiEl.clientHeight });
+      if (chartAtr && atrEl) chartAtr.applyOptions({ width: atrEl.clientWidth, height: atrEl.clientHeight });
+    }
+
+    // --- 4. HUD / Info Bar & Panel Badges Update ---
+    function updateHUD(item) {
+      if (!item || !item.candle) return;
+
+      const { candle, emaFast, emaSlow, rsi, atr } = item;
+      const isBull = candle.close >= candle.open;
+      const chg = candle.close - candle.open;
+      const chgPercent = ((chg / candle.open) * 100).toFixed(2);
+
+      // Top HUD Bar
+      document.getElementById('hud-time').textContent = formatTime(candle.time);
+      document.getElementById('hud-open').textContent = priceFormatter.format(candle.open);
+      document.getElementById('hud-high').textContent = priceFormatter.format(candle.high);
+      document.getElementById('hud-low').textContent = priceFormatter.format(candle.low);
+      
+      const closeEl = document.getElementById('hud-close');
+      closeEl.textContent = priceFormatter.format(candle.close);
+      closeEl.className = `info-value ${isBull ? 'bullish' : 'bearish'}`;
+
+      const chgEl = document.getElementById('hud-change');
+      chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)} (${chgPercent}%)`;
+      chgEl.className = `info-value ${isBull ? 'bullish' : 'bearish'}`;
+
+      document.getElementById('hud-vol').textContent = candle.volume ? candle.volume.toLocaleString() : '--';
+      document.getElementById('hud-ema-fast').textContent = emaFast !== undefined ? priceFormatter.format(emaFast) : '--';
+      document.getElementById('hud-ema-slow').textContent = emaSlow !== undefined ? priceFormatter.format(emaSlow) : '--';
+      document.getElementById('hud-rsi').textContent = rsi !== undefined ? rsiFormatter.format(rsi) : '--';
+      document.getElementById('hud-atr').textContent = atr !== undefined ? atrFormatter.format(atr) : '--';
+
+      // Update Individual Panel Badges directly
+      const emaFastStr = emaFast !== undefined ? priceFormatter.format(emaFast) : '--';
+      const emaSlowStr = emaSlow !== undefined ? priceFormatter.format(emaSlow) : '--';
+      document.getElementById('main-badge').innerHTML = `XAU/USD • EMA 9: <span style="color:var(--ema-fast-color)">${emaFastStr}</span> | EMA 21: <span style="color:var(--ema-slow-color)">${emaSlowStr}</span>`;
+
+      const rsiStr = rsi !== undefined ? rsiFormatter.format(rsi) : '--';
+      let rsiColor = 'var(--rsi-color)';
+      if (rsi !== undefined) {
+        if (rsi >= 70) rsiColor = 'var(--bearish-color)';
+        else if (rsi <= 30) rsiColor = 'var(--bullish-color)';
+      }
+      document.getElementById('rsi-badge').innerHTML = `RSI (14): <span style="color:${rsiColor}; font-weight:700;">${rsiStr}</span> • OB 70 / OS 30`;
+
+      const atrStr = atr !== undefined ? atrFormatter.format(atr) : '--';
+      document.getElementById('atr-badge').innerHTML = `ATR (14): <span style="color:var(--atr-color); font-weight:700;">${atrStr}</span>`;
+    }
+
+    function showLatestHUD() {
+      if (candleData.length === 0) return;
+      const latest = lookupMap.get(candleData[candleData.length - 1].time);
+      updateHUD(latest);
+    }
+
+    // --- 5. Data Loading & Binding ---
+    async function loadData() {
+      const loader = document.getElementById('loader-overlay');
+      const subtext = document.getElementById('loading-subtext');
+
+      try {
+        // Fetch Config
+        try {
+          const cfgRes = await fetch('/api/config');
+          if (cfgRes.ok) {
+            const cfg = await cfgRes.json();
+            if (cfg.symbol) document.getElementById('symbol-display').textContent = cfg.symbol.replace('_', '/');
+            if (cfg.timeframe) document.getElementById('tf-display').textContent = cfg.timeframe;
+          }
+        } catch (e) {
+          console.warn('Config fetch skipped:', e);
+        }
+
+        subtext.textContent = 'Downloading candles CSV...';
+        const res = await fetch('/api/candles');
+
+        if (!res.ok) {
+          let errData;
+          try { errData = await res.json(); } catch(e) {}
+          throw new Error(errData?.error || `Failed to load CSV (HTTP ${res.status})`);
+        }
+
+        subtext.textContent = 'Parsing candles & calculating indicators...';
+        const text = await res.text();
+        candleData = parseCSV(text);
+
+        if (candleData.length === 0) {
+          throw new Error('CSV file has no valid candlestick records.');
+        }
+
+        // Auto-detect & display timeframe
+        const detectedTf = detectTimeframe(candleData);
+        document.getElementById('tf-display').textContent = detectedTf;
+
+        // Calculate Indicators with Whitespace alignment
+        emaFastData = calculateEMA(candleData, 9);
+        emaSlowData = calculateEMA(candleData, 21);
+        rsiData = calculateRSI(candleData, 14);
+        atrData = calculateATR(candleData, 14);
+
+        // Build Fast Lookup Map for HUD
+        const emaFastMap = new Map(emaFastData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const emaSlowMap = new Map(emaSlowData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const rsiMap = new Map(rsiData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const atrMap = new Map(atrData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+
+        lookupMap.clear();
+        candleData.forEach(c => {
+          lookupMap.set(c.time, {
+            candle: c,
+            emaFast: emaFastMap.get(c.time),
+            emaSlow: emaSlowMap.get(c.time),
+            rsi: rsiMap.get(c.time),
+            atr: atrMap.get(c.time)
+          });
+        });
+
+        // Set series data
+        candleSeries.setData(candleData);
+        emaFastSeries.setData(emaFastData);
+        emaSlowSeries.setData(emaSlowData);
+        rsiSeries.setData(rsiData);
+        atrSeries.setData(atrData);
+
+        // Update header count
+        document.getElementById('candles-count').textContent = `Total: ${candleData.length.toLocaleString()} candles`;
+
+        // Set initial view (last 250 candles)
+        if (candleData.length > 0) {
+          const stepSec = candleData.length > 1 ? (candleData[1].time - candleData[0].time) : 300;
+          const startIdx = Math.max(0, candleData.length - 250);
+          chartMain.timeScale().setVisibleRange({
+            from: candleData[startIdx].time,
+            to: candleData[candleData.length - 1].time + stepSec * 5,
+          });
+        }
+
+        // Hide Loader
+        loader.style.display = 'none';
+        showLatestHUD();
+
+      } catch (err) {
+        console.error('Error loading chart:', err);
+        loader.innerHTML = `
+          <div class="error-card">
+            <h3><span>⚠️</span> Error Loading Candle Data</h3>
+            <p style="margin-bottom: 12px;">${err.message}</p>
+            <p style="font-size: 0.78rem; color: var(--text-secondary);">
+              Please make sure <code>CSV_DATA_PATH</code> in your <code>.env</code> file points to a valid CSV file, then restart the server.
+            </p>
+          </div>
+        `;
+      }
+    }
+
+    // --- 6. Zoom Reset Helper ---
+    function resetZoom() {
+      if (chartMain) {
+        chartMain.timeScale().fitContent();
+      }
+    }
+
+    // --- Initialize on Load ---
+    window.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      loadData();
+    });
+  </script>
+</body>
+</html>
