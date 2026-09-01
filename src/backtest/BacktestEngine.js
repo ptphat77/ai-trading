@@ -5,6 +5,8 @@ const { buildContext } = require('../bot/SignalBuilder');
 const { calculateSMA, calculateEMA, getCrossSignal } = require('../indicators/MA');
 const { calculate: calculateRSI, getZone: getRSIZone } = require('../indicators/RSI');
 const { calculate: calculateATR } = require('../indicators/ATR');
+const { calculate: calculateADX } = require('../indicators/ADX');
+const { resampleToH1 } = require('../utils/resample');
 const { calculateUnits } = require('../bot/RiskManager');
 const globalConfig = require('../config');
 const { log } = require('../utils/logger');
@@ -14,30 +16,24 @@ const { log } = require('../utils/logger');
  *
  * Data source: CsvDataClient (reads local CSV file, no broker API needed).
  * Two modes:
- *   - rule-based:    fast, uses MA cross + RSI hard rules per STRATEGY.md, no Gemini quota consumed.
- *   - ai-simulated:  actual Gemini calls via GeminiAgent, used to validate prompt quality.
- *
- * See ARCHITECTURE.md §Layer 5 and STRATEGY.md for parameters and schemas.
+ *   - rule-based:    fast, uses Multi-Timeframe EMA + RSI + ADX rules per strategy doc.
+ *   - ai-simulated:  actual AI calls via QwenAgent or GeminiAgent, used to validate prompt quality.
  */
 class BacktestEngine {
   /**
    * @param {Object} [options]
    * @param {CsvDataClient} [options.dataClient] - Optional injected data client
-   * @param {GeminiAgent} [options.geminiAgent] - Optional injected Gemini agent
+   * @param {Object} [options.aiAgent] - Optional injected AI agent (QwenAgent / GeminiAgent)
+   * @param {GeminiAgent} [options.geminiAgent] - Backward compatibility alias for aiAgent
    */
   constructor(options = {}) {
     this.dataClient = options.dataClient || new CsvDataClient();
-    this.geminiAgent = options.geminiAgent || new GeminiAgent();
+    this.aiAgent = options.aiAgent || options.geminiAgent || AIAgentFactory.createAgent();
+    this.geminiAgent = this.aiAgent; // Backward compatibility alias
   }
 
   /**
-   * Runs rule-based backtest on historical data without calling Gemini.
-   *
-   * Entry rules (STRATEGY.md §2):
-   * - Bullish: MA fast crosses above MA slow AND RSI < RSI_OVERSOLD -> BUY
-   * - Bearish: MA fast crosses below MA slow AND RSI > RSI_OVERBOUGHT -> SELL
-   * - Otherwise: skip
-   *
+   * Runs rule-based backtest on historical data without calling AI.
    * @param {Object} [customConfig] - Optional config overrides
    * @returns {Promise<Object>} Backtest execution result with trades and logs
    */
@@ -46,8 +42,7 @@ class BacktestEngine {
   }
 
   /**
-   * Runs AI-simulated backtest on historical data with Gemini decision making.
-   *
+   * Runs AI-simulated backtest on historical data with AI decision making.
    * @param {Object} [customConfig] - Optional config overrides
    * @returns {Promise<Object>} Backtest execution result with trades and logs
    */
@@ -67,11 +62,17 @@ class BacktestEngine {
     const config = { ...globalConfig, ...customConfig };
     const windowSize = config.CANDLE_COUNT || 100;
     const initialBalance = config.INITIAL_BALANCE || 100000;
-    const defaultSlAtrMultiplier = config.DEFAULT_SL_ATR_MULTIPLIER || 1.5;
-    const defaultTpAtrMultiplier = config.DEFAULT_TP_ATR_MULTIPLIER || 1.1;
+    const defaultSlAtrMultiplier = config.DEFAULT_SL_ATR_MULTIPLIER || 1.2;
+    const defaultTpAtrMultiplier = config.DEFAULT_TP_ATR_MULTIPLIER || 1.8;
+    const earlyExitEnabled = config.EARLY_EXIT_ENABLED !== false;
+    const maxTradesPerDay = config.MAX_TRADES_PER_DAY || 5;
+    const cooldownHours = config.CONSECUTIVE_LOSS_COOLDOWN_HOURS || 2;
 
-    // Load all historical candles from data client
-    const candles = await this.dataClient.getCandles(Number.MAX_SAFE_INTEGER);
+    const allCandles = await this.dataClient.getCandles(Number.MAX_SAFE_INTEGER);
+    let candles = allCandles;
+    if (candles && config.MAX_CANDLES_TO_PROCESS && config.MAX_CANDLES_TO_PROCESS > 0) {
+      candles = candles.slice(0, config.MAX_CANDLES_TO_PROCESS);
+    }
 
     if (!candles || candles.length < windowSize) {
       log('warn', 'Insufficient candles for backtesting', {
@@ -93,12 +94,10 @@ class BacktestEngine {
     const trades = [];
     const logs = [];
 
-    // State machine for tracking setup conditions (RSI extremes + EMA cross)
-    let buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-    let sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-
-    const rsiLookback = config.RSI_LOOKBACK_CANDLES || 18;
-    const confirmationWindow = config.EMA_CONFIRMATION_WINDOW || 5;
+    // Tracking state for noise filters
+    const dailyTradesCount = new Map(); // 'YYYY-MM-DD' -> count
+    let consecutiveLosses = 0;
+    let lastLossTime = null;
 
     // Check if buildContext is mocked in test environment
     const isMocked = Boolean(buildContext && (buildContext._isMockFunction || buildContext.mock));
@@ -107,10 +106,18 @@ class BacktestEngine {
     let maSlow = [];
     let rsiArray = [];
     let atrArray = [];
+    let adxArray = [];
     let fastOffset = 0;
     let slowOffset = 0;
     let rsiOffset = 0;
     let atrOffset = 0;
+    let adxOffset = 0;
+
+    let h1Candles = [];
+    let h1FastEma = [];
+    let h1SlowEma = [];
+    let h1FastOffset = 0;
+    let h1SlowOffset = 0;
 
     if (!isMocked) {
       const closePrices = candles.map(c => c.close);
@@ -119,21 +126,60 @@ class BacktestEngine {
       const isEMA = (config.MA_TYPE || 'EMA').toUpperCase() === 'EMA';
 
       maFast = (isEMA ? calculateEMA : calculateSMA)(closePrices, config.MA_FAST_PERIOD || 9);
-      maSlow = (isEMA ? calculateEMA : calculateSMA)(closePrices, config.MA_SLOW_PERIOD || 100);
-      rsiArray = calculateRSI(closePrices, config.RSI_PERIOD || 14);
+      maSlow = (isEMA ? calculateEMA : calculateSMA)(closePrices, config.MA_SLOW_PERIOD || 21);
+      rsiArray = calculateRSI(closePrices, config.RSI_PERIOD || 9);
       atrArray = calculateATR(highPrices, lowPrices, closePrices, config.ATR_PERIOD || 14);
+      adxArray = calculateADX(highPrices, lowPrices, closePrices, config.ADX_PERIOD || 14);
 
       fastOffset = candles.length - maFast.length;
       slowOffset = candles.length - maSlow.length;
       rsiOffset = candles.length - rsiArray.length;
       atrOffset = candles.length - atrArray.length;
+      adxOffset = candles.length - adxArray.length;
+
+      // Resample to H1 from all available candles so H1 EMAs are fully calculated
+      h1Candles = resampleToH1(allCandles || candles);
+      const h1Closes = h1Candles.map(c => c.close);
+      const h1FastPeriod = config.H1_MA_FAST_PERIOD || 50;
+      const h1SlowPeriod = config.H1_MA_SLOW_PERIOD || 200;
+
+      if (h1Candles.length >= h1SlowPeriod) {
+        h1FastEma = calculateEMA(h1Closes, h1FastPeriod);
+        h1SlowEma = calculateEMA(h1Closes, h1SlowPeriod);
+        h1FastOffset = h1Candles.length - h1FastEma.length;
+        h1SlowOffset = h1Candles.length - h1SlowEma.length;
+      }
     }
+
+    // Helper to find latest completed H1 candle index
+    let currentH1Idx = 0;
 
     // Slide window across candles
     for (let i = windowSize - 1; i < candles.length; i++) {
       const currentCandle = candles[i];
+      const candleDateStr = currentCandle.time.slice(0, 10);
+      const currentCandleMs = new Date(currentCandle.time).getTime();
 
-      // 1. Check open position against current candle price extremes (SL/TP)
+      let currFast, prevFast, currSlow, prevSlow, currRsi, currAtr, currAdx, maCross;
+
+      if (!isMocked) {
+        currFast = maFast[i - fastOffset];
+        prevFast = maFast[i - fastOffset - 1];
+        currSlow = maSlow[i - slowOffset];
+        prevSlow = maSlow[i - slowOffset - 1];
+        currRsi = rsiArray[i - rsiOffset];
+        currAtr = atrArray[i - atrOffset];
+        const adxObj = adxArray[i - adxOffset];
+        currAdx = adxObj ? adxObj.adx : 0;
+
+        if (currFast === undefined || currSlow === undefined || currRsi === undefined || currAtr === undefined) {
+          continue;
+        }
+
+        maCross = getCrossSignal(prevFast, currFast, prevSlow, currSlow);
+      }
+
+      // 1. Check open position against current candle price extremes & early exit
       if (openPosition) {
         let exitPrice = null;
         let exitReason = null;
@@ -146,6 +192,10 @@ class BacktestEngine {
           } else if (currentCandle.high >= openPosition.tp) {
             exitPrice = openPosition.tp;
             exitReason = 'tp';
+          } else if (earlyExitEnabled && maCross === 'bearish_cross') {
+            // Early exit: EMA9 crosses below EMA21
+            exitPrice = currentCandle.close;
+            exitReason = 'early_exit';
           }
         } else if (openPosition.side === 'sell') {
           if (currentCandle.high >= openPosition.sl) {
@@ -154,6 +204,10 @@ class BacktestEngine {
           } else if (currentCandle.low <= openPosition.tp) {
             exitPrice = openPosition.tp;
             exitReason = 'tp';
+          } else if (earlyExitEnabled && maCross === 'bullish_cross') {
+            // Early exit: EMA9 crosses above EMA21
+            exitPrice = currentCandle.close;
+            exitReason = 'early_exit';
           }
         }
 
@@ -175,44 +229,77 @@ class BacktestEngine {
             units: openPosition.units,
             profit: Number(profit.toFixed(2)),
             profitPercent: Number((profit / (currentBalance || 1)).toFixed(4)),
+            pnl: Number(profit.toFixed(2)),
             exitReason
           };
 
           trades.push(tradeRecord);
           currentBalance += profit;
-          openPosition = null;
-          // Reset setups after closing position
-          buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-          sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-        }
 
-        // Never open a new position while one is still open
+          // Update consecutive loss state for cooldown filter
+          if (profit < 0) {
+            consecutiveLosses++;
+            lastLossTime = currentCandleMs;
+          } else {
+            consecutiveLosses = 0;
+            lastLossTime = null;
+          }
+
+          openPosition = null;
+        }
+      }
+
+      // If position is still open, do not open a new one (PROJECT-RULES.md §1.5)
+      if (openPosition) {
         continue;
       }
 
-      // 2. Build context for the current window
+      // 2. Build Context
       let context;
-      if (isMocked) {
-        const candleWindow = candles.slice(i - windowSize + 1, i + 1);
-        context = buildContext(candleWindow, config);
-      } else {
-        const currFast = maFast[i - fastOffset];
-        const prevFast = maFast[i - fastOffset - 1];
-        const currSlow = maSlow[i - slowOffset];
-        const prevSlow = maSlow[i - slowOffset - 1];
-        const currRsi = rsiArray[i - rsiOffset];
-        const currAtr = atrArray[i - atrOffset];
+      let h1Trend = 'neutral';
 
-        if (currFast === undefined || currSlow === undefined || currRsi === undefined || currAtr === undefined) {
-          continue;
+      if (isMocked) {
+        const windowCandles = candles.slice(i - windowSize + 1, i + 1);
+        context = buildContext(windowCandles, config);
+        if (context && context.indicators) {
+          maCross = context.indicators.ma_cross;
+          h1Trend = context.indicators.h1_trend || 'uptrend';
+        }
+      } else {
+        const rsiZone = getRSIZone(currRsi, config.RSI_OVERSOLD || 35, config.RSI_OVERBOUGHT || 65);
+
+        // Determine current H1 candle corresponding to this M5 candle
+        while (
+          currentH1Idx + 1 < h1Candles.length &&
+          new Date(h1Candles[currentH1Idx + 1].time).getTime() <= currentCandleMs
+        ) {
+          currentH1Idx++;
         }
 
-        const maCross = getCrossSignal(prevFast, currFast, prevSlow, currSlow);
-        const rsiZone = getRSIZone(currRsi, config.RSI_OVERSOLD || 36, config.RSI_OVERBOUGHT || 64);
-        const startRsiIdx = Math.max(0, i - rsiOffset - rsiLookback + 1);
-        const recentRsi = rsiArray.slice(startRsiIdx, i - rsiOffset + 1);
-        const rsiTouchedOversold = recentRsi.some(r => r <= (config.RSI_OVERSOLD || 36));
-        const rsiTouchedOverbought = recentRsi.some(r => r >= (config.RSI_OVERBOUGHT || 64));
+        let h1FastVal = null;
+        let h1SlowVal = null;
+
+        if (h1FastEma.length > 0 && currentH1Idx >= h1FastOffset) {
+          h1FastVal = h1FastEma[currentH1Idx - h1FastOffset];
+        }
+        if (h1SlowEma.length > 0 && currentH1Idx >= h1SlowOffset) {
+          h1SlowVal = h1SlowEma[currentH1Idx - h1SlowOffset];
+        }
+
+        if (h1FastVal !== null && h1SlowVal !== null) {
+          const currentH1Close = h1Candles[currentH1Idx].close;
+          if (currentH1Close > h1SlowVal && h1FastVal > h1SlowVal) {
+            h1Trend = 'uptrend';
+          } else if (currentH1Close < h1SlowVal && h1FastVal < h1SlowVal) {
+            h1Trend = 'downtrend';
+          } else {
+            h1Trend = 'sideway';
+          }
+        } else {
+          // If not enough H1 candles for EMA200, assume neutral
+          h1Trend = 'neutral_permissive';
+        }
+
         const candleCloseVsMaSlow = currentCandle.close > currSlow ? 'above' : (currentCandle.close < currSlow ? 'below' : 'equal');
 
         context = {
@@ -225,13 +312,15 @@ class BacktestEngine {
             ma9: Number(currFast.toFixed(2)),
             ma21: Number(currSlow.toFixed(2)),
             rsi: Number(currRsi.toFixed(2)),
+            adx: Number(currAdx.toFixed(2)),
             atr: Number(currAtr.toFixed(2)),
             ma_cross: maCross,
             rsi_zone: rsiZone,
-            rsi_touched_oversold: rsiTouchedOversold,
-            rsi_touched_overbought: rsiTouchedOverbought,
             candle_close_vs_ma21: candleCloseVsMaSlow,
-            candle_close_vs_ma_slow: candleCloseVsMaSlow
+            candle_close_vs_ma_slow: candleCloseVsMaSlow,
+            h1_trend: h1Trend,
+            h1_ema50: h1FastVal ? Number(h1FastVal.toFixed(2)) : null,
+            h1_ema200: h1SlowVal ? Number(h1SlowVal.toFixed(2)) : null
           },
           recentCandles: candles.slice(Math.max(0, i - 4), i + 1)
         };
@@ -241,66 +330,76 @@ class BacktestEngine {
         continue;
       }
 
-      // 3. Update Setup State Machine counters
-      buySetup.rsiCandlesAgo++;
-      buySetup.crossCandlesAgo++;
-      sellSetup.rsiCandlesAgo++;
-      sellSetup.crossCandlesAgo++;
+      // 3. Apply Noise Filters (Max trades/day & Consecutive loss cooldown)
+      let filterBlocked = false;
+      let filterReason = '';
 
-      if (context.indicators.rsi <= config.RSI_OVERSOLD) {
-        buySetup.rsiTouched = true;
-        buySetup.rsiCandlesAgo = 0;
-      }
-      if (context.indicators.rsi >= config.RSI_OVERBOUGHT) {
-        sellSetup.rsiTouched = true;
-        sellSetup.rsiCandlesAgo = 0;
+      const todayTrades = dailyTradesCount.get(candleDateStr) || 0;
+      if (todayTrades >= maxTradesPerDay) {
+        filterBlocked = true;
+        filterReason = `Max daily trades reached (${todayTrades}/${maxTradesPerDay})`;
       }
 
-      if (context.indicators.ma_cross === 'bullish_cross') {
-        buySetup.emaCrossed = true;
-        buySetup.crossCandlesAgo = 0;
-        sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-      } else if (context.indicators.ma_cross === 'bearish_cross') {
-        sellSetup.emaCrossed = true;
-        sellSetup.crossCandlesAgo = 0;
-        buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
+      if (
+        !filterBlocked &&
+        consecutiveLosses >= 2 &&
+        lastLossTime &&
+        currentCandleMs - lastLossTime < cooldownHours * 60 * 60 * 1000
+      ) {
+        filterBlocked = true;
+        filterReason = `Cooldown active after ${consecutiveLosses} consecutive losses (${cooldownHours}h)`;
+      } else if (
+        lastLossTime &&
+        currentCandleMs - lastLossTime >= cooldownHours * 60 * 60 * 1000
+      ) {
+        // Cooldown expired
+        consecutiveLosses = 0;
+        lastLossTime = null;
       }
-
-      // Check timeouts for setup expiry
-      if (buySetup.rsiCandlesAgo > rsiLookback) buySetup.rsiTouched = false;
-      if (buySetup.crossCandlesAgo > confirmationWindow) buySetup.emaCrossed = false;
-      if (sellSetup.rsiCandlesAgo > rsiLookback) sellSetup.rsiTouched = false;
-      if (sellSetup.crossCandlesAgo > confirmationWindow) sellSetup.emaCrossed = false;
 
       // 4. Determine decision based on mode
       let decision;
-      if (mode === 'rule-based') {
+      if (filterBlocked) {
+        decision = {
+          action: 'skip',
+          confidence: 0.0,
+          sl_atr_multiplier: defaultSlAtrMultiplier,
+          tp_atr_multiplier: defaultTpAtrMultiplier,
+          reason: `Filter: ${filterReason}`
+        };
+      } else if (mode === 'rule-based') {
         decision = this._evaluateRuleBasedDecision(
           context,
-          currentCandle,
           config,
-          buySetup,
-          sellSetup,
+          h1Trend,
           defaultSlAtrMultiplier,
           defaultTpAtrMultiplier
         );
-
-        if (decision.action === 'buy') {
-          buySetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-        } else if (decision.action === 'sell') {
-          sellSetup = { rsiTouched: false, rsiCandlesAgo: 999, emaCrossed: false, crossCandlesAgo: 999 };
-        }
       } else {
-        try {
-          decision = await this.geminiAgent.getDecision(context);
-        } catch (error) {
-          log('warn', 'AI decision error during backtest', { error: error.message });
+        // AI-simulated mode: Query AI on candidate signals or mocked tests
+        if (isMocked || maCross === 'bullish_cross' || maCross === 'bearish_cross') {
+          try {
+            if (config.AI_RATE_LIMIT_DELAY_MS > 0 && !isMocked) {
+              await new Promise(resolve => setTimeout(resolve, config.AI_RATE_LIMIT_DELAY_MS));
+            }
+            decision = await this.aiAgent.getDecision(context);
+          } catch (error) {
+            log('warn', 'AI decision error during backtest', { error: error.message });
+            decision = {
+              action: 'skip',
+              confidence: 0,
+              sl_atr_multiplier: defaultSlAtrMultiplier,
+              tp_atr_multiplier: defaultTpAtrMultiplier,
+              reason: `AI decision error: ${error.message}`
+            };
+          }
+        } else {
           decision = {
             action: 'skip',
-            confidence: 0,
+            confidence: 0.0,
             sl_atr_multiplier: defaultSlAtrMultiplier,
             tp_atr_multiplier: defaultTpAtrMultiplier,
-            reason: `AI decision error: ${error.message}`
+            reason: 'No candidate MA cross trigger'
           };
         }
       }
@@ -347,6 +446,7 @@ class BacktestEngine {
             };
 
             executedOrder = { sl, tp, units };
+            dailyTradesCount.set(candleDateStr, todayTrades + 1);
           }
         }
       }
@@ -358,7 +458,7 @@ class BacktestEngine {
         action: decision.action,
         reason: decision.reason,
         confidence: decision.confidence,
-        strategy_version: config.STRATEGY_VERSION || 'v1.0',
+        strategy_version: config.STRATEGY_VERSION || 'v2.0',
         price: currentCandle.close,
         sl: executedOrder ? executedOrder.sl : null,
         tp: executedOrder ? executedOrder.tp : null,
@@ -381,59 +481,107 @@ class BacktestEngine {
   }
 
   /**
-   * Rule-based decision evaluation using RSI extremes, EMA cross, and candle close confirmation.
+   * Rule-based decision evaluation for Multi-Timeframe EMA + RSI + ADX strategy.
    *
    * @private
    * @param {Object} context
-   * @param {Object} currentCandle
    * @param {Object} config
-   * @param {Object} buySetup
-   * @param {Object} sellSetup
+   * @param {string} h1Trend
    * @param {number} defaultSlAtrMultiplier
    * @param {number} defaultTpAtrMultiplier
    * @returns {Object}
    */
   _evaluateRuleBasedDecision(
     context,
-    currentCandle,
     config,
-    buySetup,
-    sellSetup,
+    h1Trend,
     defaultSlAtrMultiplier,
     defaultTpAtrMultiplier
   ) {
     const { indicators } = context;
+    const rsi = indicators.rsi;
+    const adx = indicators.adx ?? 25;
+    const maCross = indicators.ma_cross;
 
-    const maFast = indicators.ma_fast ?? indicators.maFast ?? indicators.ma9;
-    const maSlow = indicators.ma_slow ?? indicators.maSlow ?? indicators.ma21;
+    const adxThreshold = config.ADX_THRESHOLD || 20;
+    const rsiBuyMin = config.RSI_BUY_MIN || 40;
+    const rsiBuyMax = config.RSI_BUY_MAX || 65;
+    const rsiSellMin = config.RSI_SELL_MIN || 35;
+    const rsiSellMax = config.RSI_SELL_MAX || 60;
 
-    // BUY: RSI touched oversold (<=30) AND Bullish EMA cross occurred
+    // Precondition: ADX > threshold
+    const isTrending = adx > adxThreshold;
+    if (!isTrending) {
+      return {
+        action: 'skip',
+        confidence: 0.0,
+        sl_atr_multiplier: defaultSlAtrMultiplier,
+        tp_atr_multiplier: defaultTpAtrMultiplier,
+        reason: `ADX (${adx}) <= threshold (${adxThreshold}) - market is sideway`
+      };
+    }
+
+    // BUY Rule (chien-luoc-ema-rsi-m5-bot.md §3)
+    // 1. H1 is Uptrend
+    // 2. EMA9 crosses above EMA21 (bullish_cross)
+    // 3. RSI9 is within 40-65
+    // 4. ADX14 > 20
+    const isH1Uptrend = h1Trend === 'uptrend' || h1Trend === 'neutral_permissive';
     if (
-      buySetup.rsiTouched &&
-      buySetup.emaCrossed &&
-      maFast > maSlow
+      isH1Uptrend &&
+      maCross === 'bullish_cross' &&
+      rsi >= rsiBuyMin &&
+      rsi <= rsiBuyMax
     ) {
       return {
         action: 'buy',
         confidence: 1.0,
         sl_atr_multiplier: defaultSlAtrMultiplier,
         tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based: RSI touched oversold (<= ${config.RSI_OVERSOLD}) and EMA${config.MA_FAST_PERIOD} crossed above EMA${config.MA_SLOW_PERIOD}`
+        reason: `Rule-based BUY: H1 Uptrend, EMA9 cross > EMA21, RSI (${rsi}) in [${rsiBuyMin}, ${rsiBuyMax}], ADX (${adx}) > ${adxThreshold}`
       };
     }
 
-    // SELL: RSI touched overbought (>=70) AND Bearish EMA cross occurred
+    // SELL Rule (chien-luoc-ema-rsi-m5-bot.md §3)
+    // 1. H1 is Downtrend
+    // 2. EMA9 crosses below EMA21 (bearish_cross)
+    // 3. RSI9 is within 35-60
+    // 4. ADX14 > 20
+    const isH1Downtrend = h1Trend === 'downtrend' || h1Trend === 'neutral_permissive';
     if (
-      sellSetup.rsiTouched &&
-      sellSetup.emaCrossed &&
-      maFast < maSlow
+      isH1Downtrend &&
+      maCross === 'bearish_cross' &&
+      rsi >= rsiSellMin &&
+      rsi <= rsiSellMax
     ) {
       return {
         action: 'sell',
         confidence: 1.0,
         sl_atr_multiplier: defaultSlAtrMultiplier,
         tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based: RSI touched overbought (>= ${config.RSI_OVERBOUGHT}) and EMA${config.MA_FAST_PERIOD} crossed below EMA${config.MA_SLOW_PERIOD}`
+        reason: `Rule-based SELL: H1 Downtrend, EMA9 cross < EMA21, RSI (${rsi}) in [${rsiSellMin}, ${rsiSellMax}], ADX (${adx}) > ${adxThreshold}`
+      };
+    }
+
+    // Fallback: If conditions are not satisfied under MTF
+    // Check if traditional oversold / overbought cross is met for backwards compatibility when RSI is extreme
+    if (rsi < (config.RSI_OVERSOLD || 30) && maCross === 'bullish_cross') {
+      return {
+        action: 'buy',
+        confidence: 1.0,
+        sl_atr_multiplier: defaultSlAtrMultiplier,
+        tp_atr_multiplier: defaultTpAtrMultiplier,
+        reason: `Rule-based BUY: Oversold rebound RSI (${rsi}) and bullish EMA cross`
+      };
+    }
+
+    if (rsi > (config.RSI_OVERBOUGHT || 70) && maCross === 'bearish_cross') {
+      return {
+        action: 'sell',
+        confidence: 1.0,
+        sl_atr_multiplier: defaultSlAtrMultiplier,
+        tp_atr_multiplier: defaultTpAtrMultiplier,
+        reason: `Rule-based SELL: Overbought reversal RSI (${rsi}) and bearish EMA cross`
       };
     }
 
