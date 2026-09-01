@@ -1,4 +1,5 @@
 const CsvDataClient = require('../data/CsvDataClient');
+const AIAgentFactory = require('../ai/AIAgentFactory');
 const GeminiAgent = require('../ai/GeminiAgent');
 const { buildContext } = require('../bot/SignalBuilder');
 const { calculateSMA, calculateEMA, getCrossSignal } = require('../indicators/MA');
