@@ -52,6 +52,18 @@ Read `backtest_result.json` and present the results in the standard format:
 | Max Drawdown | X% | Y% | ±Z% | ≤ 15% |
 | Sharpe Ratio | X | Y | ±Z | ≥ 1.0 |
 
+**If mode is `ai-simulated`:**
+1. Locate the newly generated detailed log in the `logs/` directory (e.g., `logs/backtest_trade_log_YYYYMMDD_HHmmss.json`).
+2. Read the `summary` section of this JSON file.
+3. Present an additional "AI Filter Quality" report highlighting:
+   - **AI Acceptance Rate**: X% (Accepted / Total Rule Signals)
+   - **Losses Avoided (True Negatives)**: X
+   - **Wins Missed (False Negatives)**: Y
+   - **AI Ruined Wins (AI SL/TP caused loss)**: Z
+   - **AI Saved Losses (AI SL/TP caused win)**: W
+   - **Verdict**: (e.g., `effective_loss_prevention` or `opportunity_cost_high`)
+4. Compare the Net Profit of `ai_accepted_actual` vs `ai_accepted_rule_simulated` to evaluate if the AI's dynamic SL/TP outperformed the rule-based SL/TP.
+
 Confirm the `strategy_version` in `backtest_result.json` matches the version in `STRATEGY.md`.
 
 ### Step 5: 🎯 Verdict & Recommendation

@@ -67,6 +67,8 @@ class BacktestEngine {
     const earlyExitEnabled = config.EARLY_EXIT_ENABLED !== false;
     const maxTradesPerDay = config.MAX_TRADES_PER_DAY || 5;
     const cooldownHours = config.CONSECUTIVE_LOSS_COOLDOWN_HOURS || 2;
+    const maxAiCalls = config.MAX_AI_CALLS || 0;
+    const maxAiAccepted = config.MAX_AI_ACCEPTED || 0;
 
     const allCandles = await this.dataClient.getCandles(Number.MAX_SAFE_INTEGER);
     let candles = allCandles;
@@ -99,6 +101,9 @@ class BacktestEngine {
     const dailyTradesCount = new Map(); // 'YYYY-MM-DD' -> count
     let consecutiveLosses = 0;
     let lastLossTime = null;
+
+    // Map: logEntry index -> logEntry object, so we can enrich it when the trade closes
+    const pendingTradeLogIdx = new Map(); // tradeIndex (trades.length at open time) -> logs index
 
     // Check if buildContext is mocked in test environment
     const isMocked = Boolean(buildContext && (buildContext._isMockFunction || buildContext.mock));
@@ -234,6 +239,23 @@ class BacktestEngine {
             exitReason
           };
 
+          const tradeOutcome = profit > 0 ? 'win' : (profit < 0 ? 'loss' : 'breakeven');
+          tradeRecord.outcome = tradeOutcome;
+
+          // Enrich the logEntry that opened this trade with actual AI trade result
+          const originLogIdx = pendingTradeLogIdx.get(openPosition.logIdx);
+          if (originLogIdx !== undefined && logs[originLogIdx]) {
+            logs[originLogIdx].aiOutcome = tradeOutcome;
+            logs[originLogIdx].aiProfit = tradeRecord.profit;
+            logs[originLogIdx].aiExitTime = currentCandle.time;
+            logs[originLogIdx].aiExitPrice = exitPrice;
+            logs[originLogIdx].aiExitReason = exitReason;
+            logs[originLogIdx].tradeId = tradeRecord.id;
+            // NOTE: ruleBasedOutcome is NOT set here — it must be simulated separately
+            // by TradeLogExporter using logEntry.ruleSl / logEntry.ruleTp + forward candles
+            // because AI multipliers differ from rule default multipliers.
+          }
+
           trades.push(tradeRecord);
           currentBalance += profit;
 
@@ -253,6 +275,16 @@ class BacktestEngine {
       // If position is still open, do not open a new one (PROJECT-RULES.md §1.5)
       if (openPosition) {
         continue;
+      }
+
+      // If max AI calls reached and no open position, terminate simulation
+      if (mode === 'ai-simulated' && maxAiCalls > 0 && aiCallCount >= maxAiCalls) {
+        break;
+      }
+
+      // If max AI accepted trades reached and no open position, terminate simulation
+      if (mode === 'ai-simulated' && maxAiAccepted > 0 && trades.length >= maxAiAccepted) {
+        break;
       }
 
       // 2. Build Context
@@ -404,6 +436,16 @@ class BacktestEngine {
             decision = ruleBasedDecision;
           }
         }
+
+        // In AI mode, tag whether the AI accepted or rejected the rule-based signal
+        if (mode === 'ai-simulated') {
+          decision._ruleBasedAction = ruleBasedDecision.action;
+          decision._ruleBasedReason = ruleBasedDecision.reason;
+          const aiActed = decision.action === 'buy' || decision.action === 'sell';
+          const aiConfident = decision.confidence >= (config.MIN_CONFIDENCE || 0.7);
+          decision._aiAccepted = aiActed && aiConfident;
+          decision._ruleHadSignal = ruleBasedDecision.action === 'buy' || ruleBasedDecision.action === 'sell';
+        }
       }
 
       // 5. Handle Decision and Risk Management
@@ -444,10 +486,23 @@ class BacktestEngine {
               sl,
               tp,
               units,
-              slDistance
+              slDistance,
+              logIdx: logs.length  // will point to the logEntry we're about to push
             };
 
-            executedOrder = { sl, tp, units };
+            // Compute rule-based SL/TP separately (using default config multipliers, not AI multipliers)
+            const ruleSlDistance = Number((defaultSlAtrMultiplier * atr).toFixed(2));
+            const ruleTpDistance = Number((defaultTpAtrMultiplier * atr).toFixed(2));
+            let ruleSl, ruleTp;
+            if (decision.action === 'buy') {
+              ruleSl = Number((currentPrice - ruleSlDistance).toFixed(2));
+              ruleTp = Number((currentPrice + ruleTpDistance).toFixed(2));
+            } else {
+              ruleSl = Number((currentPrice + ruleSlDistance).toFixed(2));
+              ruleTp = Number((currentPrice - ruleTpDistance).toFixed(2));
+            }
+
+            executedOrder = { sl, tp, units, ruleSl, ruleTp, entryPrice: currentPrice, candleIdx: i };
             dailyTradesCount.set(candleDateStr, todayTrades + 1);
           }
         }
@@ -469,7 +524,65 @@ class BacktestEngine {
         error: null
       };
 
+      // In AI mode, enrich log with rule-vs-AI comparison fields
+      if (mode === 'ai-simulated') {
+        logEntry.ruleBasedAction = decision._ruleBasedAction || decision.action;
+        logEntry.ruleBasedReason = decision._ruleBasedReason || decision.reason;
+        logEntry.aiAction = (decision._ruleHadSignal) ? decision.action : null;
+        logEntry.aiConfidence = (decision._ruleHadSignal) ? decision.confidence : null;
+        logEntry.aiAccepted = decision._aiAccepted || false;
+        logEntry.aiReason = (decision._ruleHadSignal) ? decision.reason : null;
+        logEntry.isRuleSignal = decision._ruleHadSignal || false;
+        // Outcomes filled in later when trade closes (see pendingTradeLogIdx)
+        logEntry.ruleBasedOutcome = null;  // simulated by TradeLogExporter via ruleSl/ruleTp trace
+        logEntry.ruleBasedProfit = null;
+        logEntry.aiOutcome = null;
+        logEntry.aiProfit = null;
+        logEntry.aiExitTime = null;
+        logEntry.aiExitPrice = null;
+        logEntry.aiExitReason = null;
+        logEntry.tradeId = null;
+
+        // Store rule SL/TP and entry info so TradeLogExporter can simulate hypothetical outcomes
+        // (applies to both AI-accepted and AI-rejected rule signals)
+        if (logEntry.isRuleSignal && executedOrder) {
+          logEntry.entryPrice = executedOrder.entryPrice;
+          logEntry.aiSl = executedOrder.sl;
+          logEntry.aiTp = executedOrder.tp;
+          logEntry.ruleSl = executedOrder.ruleSl;
+          logEntry.ruleTp = executedOrder.ruleTp;
+          logEntry.candleIdx = executedOrder.candleIdx;  // index into candles[] for forward simulation
+        } else if (logEntry.isRuleSignal && !executedOrder) {
+          // AI rejected: compute rule SL/TP for hypothetical simulation
+          // (atr and context are available in this scope)
+          const _atr = context.indicators ? context.indicators.atr : 0;
+          if (_atr > 0) {
+            const _ruleSlDist = Number((defaultSlAtrMultiplier * _atr).toFixed(2));
+            const _ruleTpDist = Number((defaultTpAtrMultiplier * _atr).toFixed(2));
+            const _side = logEntry.ruleBasedAction;
+            const _price = currentCandle.close;
+            logEntry.entryPrice = _price;
+            logEntry.aiSl = null;
+            logEntry.aiTp = null;
+            if (_side === 'buy') {
+              logEntry.ruleSl = Number((_price - _ruleSlDist).toFixed(2));
+              logEntry.ruleTp = Number((_price + _ruleTpDist).toFixed(2));
+            } else if (_side === 'sell') {
+              logEntry.ruleSl = Number((_price + _ruleSlDist).toFixed(2));
+              logEntry.ruleTp = Number((_price - _ruleTpDist).toFixed(2));
+            }
+            logEntry.candleIdx = i;
+          }
+        }
+      }
+
       logs.push(logEntry);
+
+      // After pushing, update pendingTradeLogIdx to use the actual pushed index
+      // (openPosition.logIdx was set to logs.length BEFORE push, so it matches)
+      if (mode === 'ai-simulated' && logEntry.aiAccepted && executedOrder && openPosition) {
+        pendingTradeLogIdx.set(openPosition.logIdx, logs.length - 1);
+      }
     }
 
     return {
@@ -478,7 +591,8 @@ class BacktestEngine {
       finalBalance: Number(currentBalance.toFixed(2)),
       trades,
       logs,
-      candlesCount: candles.length
+      candlesCount: candles.length,
+      allCandles: candles  // exposed for TradeLogExporter forward simulation
     };
   }
 
@@ -528,7 +642,7 @@ class BacktestEngine {
     // 2. EMA9 crosses above EMA21 (bullish_cross)
     // 3. RSI9 is within 40-65
     // 4. ADX14 > 20
-    const isH1Uptrend = h1Trend === 'uptrend' || h1Trend === 'neutral_permissive';
+    const isH1Uptrend = h1Trend === 'uptrend';
     if (
       isH1Uptrend &&
       maCross === 'bullish_cross' &&
@@ -549,7 +663,7 @@ class BacktestEngine {
     // 2. EMA9 crosses below EMA21 (bearish_cross)
     // 3. RSI9 is within 35-60
     // 4. ADX14 > 20
-    const isH1Downtrend = h1Trend === 'downtrend' || h1Trend === 'neutral_permissive';
+    const isH1Downtrend = h1Trend === 'downtrend';
     if (
       isH1Downtrend &&
       maCross === 'bearish_cross' &&
