@@ -1,7 +1,7 @@
-# DATA-SCHEMA.md — TradeBot_XAU_Gemini
+# DATA-SCHEMA.md — TradeBot_XAU
 
-**Version**: v1.0
-**Date**: 2026-08-29
+**Version**: v2.0
+**Date**: 2026-09-01
 
 This document defines the data structures (schema) exchanged between components in the system.
 
@@ -15,11 +15,16 @@ This document defines the data structures (schema) exchanged between components 
 | `BROKER_ACCOUNT_ID` | string | — | Broker Account ID |
 | `BROKER_BASE_URL` | string | — | Broker REST API base URL (Demo or Live, set per broker docs) |
 | `CSV_DATA_PATH` | string | `./data/candles.csv` | Path to local source-agnostic CSV file, used by `CsvDataClient` for backtest |
-| `GEMINI_API_KEY` | string | — | Gemini API key |
-| `GEMINI_MODEL` | string | — | Gemini model name, e.g. `gemini-2.5-flash` |
+| `AI_PROVIDER` | string | `qwen` | Active AI provider: `qwen` \| `gemini`. Determines which agent `AIAgentFactory` creates. |
+| `AI_RATE_LIMIT_DELAY_MS` | number | `300` | Delay between AI API calls in backtest AI-simulated mode (ms) |
+| `DASHSCOPE_API_KEY` | string | — | Alibaba Cloud DashScope API key (used when `AI_PROVIDER=qwen`) |
+| `DASHSCOPE_MODEL` | string | `qwen-plus` | Qwen model name (used when `AI_PROVIDER=qwen`) |
+| `DASHSCOPE_BASE_URL` | string | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | DashScope API base URL |
+| `GEMINI_API_KEY` | string | — | Google Gemini API key (used when `AI_PROVIDER=gemini`) |
+| `GEMINI_MODEL` | string | `gemini-2.5-flash` | Gemini model name (used when `AI_PROVIDER=gemini`) |
 | `SYMBOL` | string | `XAU_USD` | Trading symbol |
 | `TIMEFRAME` | string | `M5` | Candle timeframe |
-| `RISK_PER_TRADE` | float | `0.01` | Risk % of account per trade |
+| `RISK_PER_TRADE` | float | `0.015` | Risk % of account per trade |
 | `MIN_CONFIDENCE` | float | `0.70` | Minimum confidence threshold to enter a trade |
 
 ## 2. Candle (OHLCV) — from Broker API
@@ -50,7 +55,7 @@ This document defines the data structures (schema) exchanged between components 
 - `ma_cross`: `"bullish_cross"` | `"bearish_cross"` | `"neutral"`
 - corresponding `rsi` zone (via `RSI.getZone()`): `"oversold"` | `"overbought"` | `"neutral"`
 
-## 4. Gemini Context — Input sent to AI
+## 4. AI Context — Input sent to AI agent
 
 ```json
 {
@@ -72,7 +77,7 @@ This document defines the data structures (schema) exchanged between components 
 
 `recentCandles`: array of 5 most recent candles (OHLCV).
 
-## 5. Gemini Response — Output from AI
+## 5. AI Response — Output from AI agent
 
 ```json
 {
@@ -84,7 +89,7 @@ This document defines the data structures (schema) exchanged between components 
 }
 ```
 
-**Validation rules** (mandatory before use, see also `API-CONTRACTS.md`):
+**Validation rules** (mandatory before use, see also `API-CONTRACTS.md`) — enforced in `BaseAIAgent._validateAndFormatDecision()`:
 - `action` ∈ `{"buy", "sell", "skip"}`
 - `confidence` ∈ `[0, 1]`
 - `sl_atr_multiplier`, `tp_atr_multiplier` > 0
@@ -98,15 +103,16 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
 {
   "timestamp": "2026-08-29T10:05:00Z",
   "symbol": "XAU_USD",
+  "ai_provider": "qwen",
   "action": "buy",
   "reason": "RSI oversold at 32.5, MA9 bullish cross MA21",
   "confidence": 0.82,
-  "strategy_version": "v1.0",
+  "strategy_version": "v2.0",
   "price": 2350.45,
   "sl": 2347.68,
   "tp": 2355.99,
   "units": 12,
-  "gemini_raw_response": {
+  "ai_raw_response": {
     "action": "buy",
     "confidence": 0.82,
     "sl_atr_multiplier": 1.5,
@@ -117,6 +123,7 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
 }
 ```
 
+- `ai_provider`: which provider generated the decision (e.g. `"qwen"`, `"gemini"`). Allows cross-referencing provider performance from logs.
 - `strategy_version`: matches the version in `STRATEGY.md` at the time of execution — for later cross-reference.
 - `error`: `null` if normal; if there's an error (timeout, parse fail...) log a brief description, `action` will always be `"skip"`.
 

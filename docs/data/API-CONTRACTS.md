@@ -1,7 +1,7 @@
-# API-CONTRACTS.md — TradeBot_XAU_Gemini
+# API-CONTRACTS.md — TradeBot_XAU
 
-**Version**: v1.0
-**Date**: 2026-08-29
+**Version**: v2.0
+**Date**: 2026-09-01
 
 ---
 
@@ -77,19 +77,21 @@ GET /v3/accounts/{BROKER_ACCOUNT_ID}/summary
 | HTTP 5xx / timeout | Retry max N times (configurable), then `skip` |
 | Rate limit (429) | Backoff, do not spam requests |
 
-## 2. Gemini API Contract (external)
+## 2. AI Provider API Contract (external)
 
-**Endpoint**: per official Gemini SDK/REST, model from `GEMINI_MODEL` in `.env`.
+The system supports multiple AI providers via the `AI_PROVIDER` environment variable. All providers share the same **input/output contract** — only the underlying HTTP call differs (handled inside each `*Agent.js`).
+
+> Current supported providers: `qwen` (default, Alibaba Cloud DashScope) | `gemini` (Google Gemini)
 
 ### 2.1 Request
 
 - Input: context object per schema in section 4, `DATA-SCHEMA.md`.
-- Prompt: per template defined in `STRATEGY.md` (section 4) — **do not** hardcode prompt in `GeminiAgent.js`, read from a centralized place for easy optimization.
-- Require Gemini to return **pure JSON**, without explanatory text outside JSON (specify clearly in prompt).
+- Prompt: per template defined in `STRATEGY.md` (section 4) and centralized in `src/ai/promptTemplate.js` — **do not** hardcode prompt in any `*Agent.js`, all agents read from the shared template.
+- Require AI to return **pure JSON**, without explanatory text outside JSON (specify clearly in prompt).
 
 ### 2.2 Response contract
 
-Must strictly follow schema (section 5, `DATA-SCHEMA.md`):
+Must strictly follow schema (section 5, `DATA-SCHEMA.md`) — identical for all providers:
 ```json
 {
   "action": "buy" | "sell" | "skip",
@@ -110,7 +112,16 @@ Must strictly follow schema (section 5, `DATA-SCHEMA.md`):
 | `confidence < MIN_CONFIDENCE` | Format is valid but automatically `skip` |
 | API timeout (exceeds X seconds) | `skip`, log reason `timeout` |
 
-Do not retry calling Gemini in the same candle cycle — if missed, wait for the next cycle (avoid entering late trades based on old data).
+Do not retry calling the AI provider in the same candle cycle — if missed, wait for the next cycle (avoid entering late trades based on old data).
+
+### 2.4 Provider-specific configuration
+
+| Provider | Key env vars | Default model |
+|---|---|---|
+| `qwen` | `DASHSCOPE_API_KEY`, `DASHSCOPE_MODEL`, `DASHSCOPE_BASE_URL` | `qwen-plus` |
+| `gemini` | `GEMINI_API_KEY`, `GEMINI_MODEL` | `gemini-2.5-flash` |
+
+To add a new provider: (1) add env vars to `.env.example` + `DATA-SCHEMA.md §1`, (2) implement `src/ai/NewProviderAgent.js` extending `BaseAIAgent`, (3) register in `AIAgentFactory`.
 
 ## 3. Internal Module Interfaces
 
@@ -141,15 +152,29 @@ getZone(rsiValue: number): 'oversold'|'overbought'|'neutral'
 calculate(candles: Candle[], period?: number): number[]
 ```
 
-### `src/ai/GeminiAgent.js`
+### `src/ai/BaseAIAgent.js`
 ```js
-getDecision(context: GeminiContext): Promise<GeminiResponse>
-// Internally validates + applies fallback skip per section 2.3
+// Abstract base class — do not instantiate directly
+getDecision(context: AIContext): Promise<AIResponse>  // abstract, overridden by each provider
+_validateAndFormatDecision(rawText: string): AIResponse  // shared JSON validation + skip fallback
+_createSkipFallback(reason: string): AIResponse
+```
+
+### `src/ai/AIAgentFactory.js`
+```js
+static createAgent(options?: { provider?: string }): BaseAIAgent
+// Reads AI_PROVIDER from config (default 'qwen'), returns QwenAgent or GeminiAgent
+```
+
+### `src/ai/QwenAgent.js` | `src/ai/GeminiAgent.js`
+```js
+getDecision(context: AIContext): Promise<AIResponse>
+// Internally calls provider API, delegates validation to BaseAIAgent._validateAndFormatDecision()
 ```
 
 ### `src/bot/SignalBuilder.js`
 ```js
-buildContext(candles: Candle[], indicators: IndicatorOutput, currentPrice: number): GeminiContext
+buildContext(candles: Candle[], indicators: IndicatorOutput, currentPrice: number): AIContext
 ```
 
 ### `src/bot/RiskManager.js`

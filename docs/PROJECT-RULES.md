@@ -1,7 +1,7 @@
-# PROJECT-RULES.md — TradeBot_XAU_Gemini
+# PROJECT-RULES.md — TradeBot_XAU
 
-**Version**: v1.0
-**Date**: 2026-08-29
+**Version**: v2.0
+**Date**: 2026-09-01
 
 This document finalizes the mandatory rules that must be followed throughout the bot's development and operation. Highest priority: **capital safety > speed > convenience**.
 
@@ -10,8 +10,8 @@ This document finalizes the mandatory rules that must be followed throughout the
 ## 1. Safety Rules — HIGHEST PRIORITY
 
 1. **Never trade blind**:
-   - Gemini API timeout → `skip`
-   - JSON response from Gemini fails to parse → log warning, `skip`
+   - AI provider API timeout → `skip`
+   - JSON response from AI agent fails to parse → log warning, `skip`
    - `confidence < MIN_CONFIDENCE` → `skip`
    - Incomplete candle data (missing candles, Broker API error) → `skip`, do not use old data to guess.
 
@@ -26,7 +26,7 @@ This document finalizes the mandatory rules that must be followed throughout the
 ## 2. Security
 
 - The `.env` file **must never** be committed to git — it must be in `.gitignore` from the very first commit of the repo.
-- Do not log API keys (Broker, Gemini) to the console or log files in any form.
+- Do not log any API keys (Broker, AI provider) to the console or log files in any form.
 - Do not hardcode API keys or secrets in source code.
 - The `.env.example` file (containing no real values) can be committed for configuration guidance.
 
@@ -42,21 +42,21 @@ This document finalizes the mandatory rules that must be followed throughout the
 
 ## 4. Configuration Management
 
-- All **operational** parameters (risk %, confidence threshold, Gemini model, symbol, timeframe, Broker base URL) are read from `.env` via `src/config.js` — not hardcoded in business logic.
+- All **operational** parameters (risk %, confidence threshold, AI provider, AI model, symbol, timeframe, Broker base URL) are read from `.env` via `src/config.js` — not hardcoded in business logic.
 - All **strategy** parameters (MA period, RSI oversold/overbought, default ATR multiplier, prompt template) are defined and versioned in `STRATEGY.md`, applied to code via config — when optimizing strategy, edit `STRATEGY.md` first, code only reads from it.
 
 ## 5. Testing / Verification
 
 Must sequentially go through the 4 phases defined in `ARCHITECTURE.md` (Verification Plan), no phase can be skipped:
 
-1. Manual unit test (indicator + GeminiAgent with mock context)
+1. Manual unit test (indicator + AI agent with mock context)
 2. Backtest on historical data
 3. Paper Trading (Broker Demo account), monitor for at least 24-48h
 4. Live Trading — only after Demo is stable for ≥ 1 week
 
 ## 5a. Testing Framework
 
-**Framework**: [Jest](https://jestjs.io/) — chosen for good mock support (needed for `BrokerClient` and `GeminiAgent`).
+**Framework**: [Jest](https://jestjs.io/) — chosen for good mock support (needed for `BrokerClient` and AI agents).
 
 **Installation**:
 ```bash
@@ -69,13 +69,15 @@ npm install --save-dev jest
 - Run one file: `npx jest tests/RSI.test.js --verbose`
 
 **Mock strategy**:
-- `BrokerClient` and `GeminiAgent`: use `jest.mock()` when testing `TradingBot` or any module depending on them.
+- `BrokerClient` and AI agents (`QwenAgent`, `GeminiAgent`): use `jest.mock()` when testing `TradingBot` or any module depending on them.
+- `AIAgentFactory`: test that correct agent type is returned for each `AI_PROVIDER` value.
 - Indicators (`MA`, `RSI`, `ATR`): pure functions — test directly, no mock needed.
-- HTTP (`axios`): mock using `jest.mock('axios')` when testing `BrokerClient`.
+- HTTP (`axios`): mock using `jest.mock('axios')` when testing `BrokerClient` or agent HTTP calls.
 
 **Minimum coverage required** (see `write-test` skill):
-- All safety fallback paths of `GeminiAgent` (timeout, parse fail, low confidence) must have tests.
+- All safety fallback paths of each AI agent (timeout, parse fail, low confidence) must have tests — these are in `BaseAIAgent` and verified at the concrete agent level.
 - All new indicator modules must have tests before merging to `main`.
+- Any new AI provider agent must include tests before merging to `main`.
 
 ## 6. Git Workflow (proposed)
 
@@ -87,7 +89,7 @@ npm install --save-dev jest
 
 ## 7. General Error Handling
 
-- All external API calls (Broker, Gemini) must be wrapped in `try/catch`; errors must not crash the entire bot loop.
+- All external API calls (Broker, AI provider) must be wrapped in `try/catch`; errors must not crash the entire bot loop.
 - Error logs must include: timestamp, module causing error, related context, and fallback action taken (usually `skip`).
 - No infinite retries — set a reasonable retry limit for each API call, then `skip` the current cycle.
 

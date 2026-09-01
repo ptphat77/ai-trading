@@ -1,7 +1,7 @@
-# ARCHITECTURE.md — TradeBot_XAU_Gemini
+# ARCHITECTURE.md — TradeBot_XAU
 
-**Version**: v1.0
-**Date**: 2026-08-29
+**Version**: v2.0
+**Date**: 2026-09-01
 
 ---
 
@@ -11,17 +11,18 @@
 |---|---|---|
 | Runtime | Node.js | Simple, suitable for I/O-bound (continuous API calls) |
 | Broker API | Broker REST API (configurable via `.env`) | Decoupled — swap broker by changing `BROKER_BASE_URL` in `.env` |
-| AI Engine | Google Gemini API | Final decision making based on technical context |
+| AI Engine | **Pluggable** via `AIAgentFactory` — default: Qwen (Alibaba DashScope); alternative: Google Gemini. Switch by setting `AI_PROVIDER` in `.env`. | Final decision making based on technical context |
 | Indicators | `technicalindicators` (npm) | Reusable, verified, avoids rewriting MA/RSI/ATR |
-| HTTP client | `axios` | Call Broker API + Gemini API |
+| HTTP client | `axios` | Call Broker API + AI Provider API |
 | Config | `dotenv` | Secure API keys, separate config from code |
 | Backtest Storage | `better-sqlite3` | Lightweight, no separate DB server needed |
 
 ## 2. Directory Structure
 
 ```
-TradeBot_XAU_Gemini/
+TradeBot_XAU/
 ├── .env                        ← API keys — DO NOT commit to git
+├── .env.example                ← Template (no real values) — safe to commit
 ├── .gitignore
 ├── package.json
 ├── README.md
@@ -39,10 +40,14 @@ TradeBot_XAU_Gemini/
 │   │   └── ATR.js                ← ATR (used for dynamic SL)
 │   │
 │   ├── ai/
-│   │   └── GeminiAgent.js        ← Call Gemini, build prompt, parse response
+│   │   ├── BaseAIAgent.js       ← Abstract base: shared prompt template, JSON validation, skip fallback
+│   │   ├── AIAgentFactory.js    ← Factory: creates agent based on AI_PROVIDER in .env
+│   │   ├── QwenAgent.js         ← Alibaba Cloud DashScope (Qwen) — default provider
+│   │   ├── GeminiAgent.js       ← Google Gemini — alternative provider
+│   │   └── promptTemplate.js    ← Centralized prompt template (shared by all agents)
 │   │
 │   ├── bot/
-│   │   ├── SignalBuilder.js      ← Aggregate indicators → context for Gemini
+│   │   ├── SignalBuilder.js      ← Aggregate indicators → context for AI agent
 │   │   ├── TradingBot.js         ← Main logic: candles → signal → AI → order
 │   │   └── RiskManager.js        ← Calculate units based on risk %
 │   │
@@ -58,6 +63,9 @@ TradeBot_XAU_Gemini/
 │
 ├── logs/
 │   └── trade_log.jsonl           ← Log every decision (including "skip")
+│
+├── tests/
+│   └── *.test.js               ← Jest unit tests
 │
 └── scripts/
     ├── run_live.js                ← Entry point: run real/demo bot
@@ -96,9 +104,18 @@ Pure functions, no side-effects, easy to unit test independently:
 
 Default period/threshold parameters are taken from `STRATEGY.md`, not hardcoded in indicator files.
 
-### Layer 3 — AI Decision Layer (`src/ai/GeminiAgent.js`) ⭐ Core
+### Layer 3 — AI Decision Layer (`src/ai/`) ⭐ Core
 
-Receives context from `SignalBuilder`, calls Gemini API, returns validated decision.
+Pluggable multi-provider AI layer. `AIAgentFactory.createAgent()` reads `AI_PROVIDER` from `.env` and returns the appropriate agent instance. All agents extend `BaseAIAgent` and share the same interface and safety behavior.
+
+**Files**:
+- `BaseAIAgent.js` — shared prompt template, JSON validation, skip fallback logic
+- `AIAgentFactory.js` — factory: resolves `AI_PROVIDER` → instantiates `QwenAgent` or `GeminiAgent`
+- `QwenAgent.js` — calls Alibaba Cloud DashScope (OpenAI-compatible endpoint)
+- `GeminiAgent.js` — calls Google Gemini API
+- `promptTemplate.js` — centralized prompt, shared by all providers (read from here, not hardcoded in agent)
+
+**Adding a new AI provider**: create `src/ai/NewProviderAgent.js` extending `BaseAIAgent`, override `getDecision()`, register in `AIAgentFactory`.
 
 Mandatory safety principles (detailed in `PROJECT-RULES.md`):
 - `confidence < MIN_CONFIDENCE` → `skip`
@@ -109,13 +126,13 @@ Input/output schema: see `DATA-SCHEMA.md`. Prompt template and response contract
 
 ### Layer 4 — Bot Logic (`src/bot/`)
 
-- **SignalBuilder.js**: aggregates all indicators into 1 context object to send to Gemini.
+- **SignalBuilder.js**: aggregates all indicators into 1 context object to send to the AI agent.
 - **RiskManager.js**: `calculateUnits(balance, riskPercent, sl_distance, price)` → number of units, enforces maximum risk per trade.
 - **TradingBot.js**: main loop (every 5 minutes):
-  1. Fetch latest 100 M5 candles
-  2. Calculate MA9, MA21, RSI, ATR
+  1. Fetch latest M5 candles (+ H1 candles for MTF trend filter)
+  2. Calculate EMA9/21 (M5), EMA50/200 (H1), RSI9, ADX14, ATR14
   3. Check open positions → if exists, skip
-  4. Build context → send to GeminiAgent
+  4. Build context → send to AI agent (via `AIAgentFactory.createAgent()`)
   5. Receive decision
   6. If buy/sell and confidence reaches threshold: calculate SL/TP by ATR, calculate units via RiskManager, place order
   7. Log fully (including skip)
@@ -123,8 +140,8 @@ Input/output schema: see `DATA-SCHEMA.md`. Prompt template and response contract
 ### Layer 5 — Backtest Engine (`src/backtest/`)
 
 - **BacktestEngine.js**: simulation on historical candle data loaded from `CsvDataClient`, 2 modes:
-  - *Rule-based*: uses hard rules (MA cross + RSI threshold) for fast testing, consumes no Gemini quota.
-  - *AI-simulated*: actual Gemini calls, used when needing to check prompt quality.
+  - *Rule-based*: uses hard rules (EMA cross + RSI + ADX threshold) for fast testing, consumes no AI quota.
+  - *AI-simulated*: actual AI provider calls (whichever `AI_PROVIDER` is configured), used when needing to check prompt quality.
   - Data source: `CsvDataClient.getCandles()` — iterates through the CSV window-by-window to simulate real-time candle flow.
 - **ReportGenerator.js**: calculates Win Rate, Profit Factor, Net Profit, Max Drawdown, Sharpe Ratio; exports `backtest_result.json` + prints to console.
 
@@ -136,13 +153,13 @@ Consistent logging to both file and console, shared across all layers.
 
 ```mermaid
 flowchart TD
-    A[Every 5 mins] --> B[Fetch 100 candles via BrokerClient]
-    B --> C[Calculate MA9, MA21, RSI, ATR]
+    A[Every 5 mins] --> B[Fetch M5 + H1 candles via BrokerClient]
+    B --> C[Calculate EMA9/21 M5 + EMA50/200 H1 + RSI9 + ADX14 + ATR14]
     C --> D{Has open position?}
     D -- Yes --> E[Skip - Wait to close]
     D -- No --> F[Build Context]
-    F --> G[Send to Gemini API]
-    G --> H{Gemini decision}
+    F --> G[Send to AI Agent via AIAgentFactory]
+    G --> H{AI decision}
     H -- skip --> I[Log: skip + reason]
     H -- confidence < threshold --> I
     H -- buy/sell --> J[Calculate SL/TP by ATR]
@@ -154,14 +171,16 @@ flowchart TD
 ## 5. Design Principles
 
 - **Separate parameters from architecture**: MA period, RSI threshold, prompt template... are defined in `STRATEGY.md`, not located in this architecture file. When optimizing strategy, no need to touch `ARCHITECTURE.md`.
-- **Each module independent, easy to test separately**: indicators are pure functions; `BrokerClient` and `GeminiAgent` can be mocked when testing `TradingBot`.
-- **Backtest does not depend on real Gemini** unless actively enabling AI-simulated mode — helps iterate quickly during strategy optimization.
+- **Each module independent, easy to test separately**: indicators are pure functions; `BrokerClient` and AI agents can be mocked when testing `TradingBot`.
+- **Backtest does not depend on real AI API calls** unless actively enabling AI-simulated mode — helps iterate quickly during strategy optimization.
+- **AI provider is hot-swappable**: set `AI_PROVIDER=qwen` or `AI_PROVIDER=gemini` in `.env` — no code changes required. Adding a new provider only requires a new `*Agent.js` file + one line in `AIAgentFactory`.
 
 ## 6. Verification Plan
 
 ### Phase 1 — Manual Unit Test
-- Run each indicator with real candle data, compare MA/RSI/ATR with TradingView.
-- Test `GeminiAgent` with mock context, check correct JSON schema parsing.
+- Run each indicator with real candle data, compare EMA/RSI/ADX/ATR with TradingView.
+- Test each AI agent (`QwenAgent`, `GeminiAgent`) with mock context, check correct JSON schema parsing.
+- Test `AIAgentFactory` to confirm correct provider routing based on `AI_PROVIDER` config.
 
 ### Phase 2 — Backtest
 - `node scripts/run_backtest.js` — reads data from `data/candles.csv` via `CsvDataClient` (no broker API needed).
@@ -182,3 +201,4 @@ flowchart TD
 - Multi-symbol / multi-timeframe
 - Real-time monitoring dashboard (if implemented, `UI-DESIGN.md` needs to be added)
 - Switch from SQLite to another DB if backtest data volume becomes much larger
+- Adding a new AI provider: implement `src/ai/NewProviderAgent.js` extending `BaseAIAgent`, add a new case in `AIAgentFactory.createAgent()`, add the corresponding API key/model vars to `.env` and `DATA-SCHEMA.md §1`.

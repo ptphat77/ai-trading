@@ -1,78 +1,117 @@
-# STRATEGY.md — XAU/USD Trading Strategy (EMA + RSI + ATR + AI)
+# STRATEGY.md — XAU/USD Trading Strategy (Multi-Timeframe EMA + RSI + ADX + ATR + AI)
 
 > ⚠️ This document changes frequently during strategy optimization.
 > Do not modify `ARCHITECTURE.md` when only changing parameters here — the code should only read parameters from here via config, without hardcoding.
 
-**Current version**: v1.3
-**Last updated**: 2026-08-31
+**Current version**: v2.0
+**Last updated**: 2026-09-01
 
 ---
 
 ## 1. Indicator Parameters (current)
 
+### Higher Timeframe (H1) — Trend Filter
 | Parameter | Value | Notes |
 |---|---|---|
-| MA fast | 9 | EMA (Exponential Moving Average) |
-| MA slow | 100 | EMA (Exponential Moving Average) |
-| RSI period | 14 | |
-| RSI Oversold | 36 | Below this threshold is considered oversold setup |
-| RSI Overbought | 64 | Above this threshold is considered overbought setup |
-| RSI Lookback | 18 | Number of candles to remember RSI extreme touch setup |
-| EMA Confirmation Window | 5 | Number of candles to wait for candle close across EMA100 |
+| H1 EMA fast | 50 | Exponential Moving Average on H1 |
+| H1 EMA slow | 200 | Exponential Moving Average on H1 |
+
+### Entry Timeframe (M5)
+| Parameter | Value | Notes |
+|---|---|---|
+| M5 EMA fast | 9 | Exponential Moving Average on M5 |
+| M5 EMA slow | 21 | Exponential Moving Average on M5 |
+| RSI period | 9 | Momentum confirmation on M5 |
+| RSI Buy Zone | [40, 65] | Avoid buying above 65/70 overbought |
+| RSI Sell Zone | [35, 60] | Avoid selling below 35/30 oversold |
+| ADX period | 14 | Average Directional Index on M5 |
+| ADX Threshold | 20 | Market is considered trending when ADX > 20; <= 20 is sideway |
 | ATR period | 14 | Used to calculate dynamic SL/TP |
 
-## 2. Entry Logic — Rule-based (used for fast Backtest, without calling AI)
+---
+
+## 2. Entry & Exit Logic — Rule-based (used for fast Backtest, without calling AI)
 
 Used when running `BacktestEngine` in Rule-based mode for fast testing without consuming Gemini quota:
 
-- **Bullish signal (consider buying)**:
-  1. RSI touched oversold (`RSI <= 36`) within the last 18 candles AND EMA9 crosses above EMA100 (`bullish_cross`) — in any order.
-  2. Candle close confirms above EMA100 (`Close > EMA100`) within 5 candles.
-- **Bearish signal (consider selling)**:
-  1. RSI touched overbought (`RSI >= 64`) within the last 18 candles AND EMA9 crosses below EMA100 (`bearish_cross`) — in any order.
-  2. Candle close confirms below EMA100 (`Close < EMA100`) within 5 candles.
-- Outside these conditions: `skip`
+- **Precondition (mandatory)**:
+  - `ADX14 (M5) > 20`: market is in an active trend. If `ADX14 <= 20`, bot skips and stays out.
+
+- **Bullish Signal (BUY)**:
+  1. H1 Trend is **Uptrend**: `Price(H1) > EMA200(H1) AND EMA50(H1) > EMA200(H1)`.
+  2. M5 EMA9 crosses above EMA21 (`bullish_cross`).
+  3. M5 RSI9 is in sweet-spot zone: `40 <= RSI9 <= 65`.
+  4. ADX14 > 20.
+
+- **Bearish Signal (SELL)**:
+  1. H1 Trend is **Downtrend**: `Price(H1) < EMA200(H1) AND EMA50(H1) < EMA200(H1)`.
+  2. M5 EMA9 crosses below EMA21 (`bearish_cross`).
+  3. M5 RSI9 is in sweet-spot zone: `35 <= RSI9 <= 60`.
+  4. ADX14 > 20.
+
+- **Exit Rules**:
+  - **Stop-Loss (SL)**: `1.5 x ATR14` (M5).
+  - **Take-Profit (TP)**: `1.1 x ATR14` (M5).
+  - **Early Exit**: If `openPosition.side === 'buy'` and EMA9 crosses below EMA21 on M5 before reaching SL/TP -> close position at market close price. If `openPosition.side === 'sell'` and EMA9 crosses above EMA21 -> close position at market close price.
+
+---
 
 ## 3. AI Decision Layer — Configuration
 
 | Parameter | Value | Notes |
 |---|---|---|
 | Confidence threshold (`MIN_CONFIDENCE`) | 0.70 | Below this threshold → automatically `skip` even if AI proposes buy/sell |
-| Default SL ATR multiplier | 1.5 | Gemini can propose a different value in the response |
-| Default TP ATR multiplier | 1.1 | Gemini can propose a different value in the response |
-| Gemini model | Configured via `.env` (`GEMINI_MODEL`) | Do not hardcode the model name in prompt/code |
+| Default SL ATR multiplier | 1.5 | AI agent can propose a tailored value in response |
+| Default TP ATR multiplier | 1.1 | AI agent can propose a tailored value in response |
+| AI Provider | Configured via `.env` (`AI_PROVIDER`) | Default: `qwen` (Alibaba DashScope). Set `AI_PROVIDER=gemini` to switch to Google Gemini. |
+| AI Model | Configured via `.env` (`DASHSCOPE_MODEL` or `GEMINI_MODEL`) | Depends on active provider. Do not hardcode. |
 
-## 4. Prompt Template for Gemini
+---
+
+## 4. Prompt Template (shared by all AI providers)
+
+> The template below is stored in `src/ai/promptTemplate.js` and used by **all** AI agents (`QwenAgent`, `GeminiAgent`, etc.) via `BaseAIAgent`. Do not hardcode this in any `*Agent.js` file.
 
 ```
-You are an expert Forex technical analyst.
-Analyze the following signal and make a trading decision for XAU/USD:
-[context: symbol, timeframe, currentPrice, indicators{ma_fast, ma_slow, rsi, atr, ma_cross, rsi_zone, rsi_touched_oversold, rsi_touched_overbought, candle_close_vs_ma_slow}, recentCandles]
+You are an expert Gold (XAU/USD) technical analyst and trading bot decision engine.
+Strategy Rules:
+1. Multi-Timeframe Trend (H1):
+   - Uptrend when Price > EMA200(H1) and EMA50(H1) > EMA200(H1) -> prioritize BUY.
+   - Downtrend when Price < EMA200(H1) and EMA50(H1) < EMA200(H1) -> prioritize SELL.
+   - If market is counter-trend or uncertain -> prefer 'skip'.
+2. M5 Momentum & Entry:
+   - Bullish setup: EMA9 crossed above EMA21, RSI(9) ideally in 40-65 zone (avoid buying above 70).
+   - Bearish setup: EMA9 crossed below EMA21, RSI(9) ideally in 35-60 zone (avoid selling below 30).
+3. Volatility & Risk:
+   - ADX(14) > 20 confirms trending market. If ADX <= 20 (sideway/chop), return 'skip'.
+   - Propose optimal sl_atr_multiplier (default 1.2 - 1.5) and tp_atr_multiplier (default 1.1 - 1.8) based on market structure and volatility.
 
-Requirement: Return JSON with the format:
+Return strictly valid JSON in this schema:
 {
   "action": "buy" | "sell" | "skip",
-  "confidence": 0.0-1.0,
+  "confidence": 0.0 to 1.0,
   "sl_atr_multiplier": number,
   "tp_atr_multiplier": number,
-  "reason": "Brief explanation"
+  "reason": "Clear concise explanation of the technical factors leading to this decision"
 }
 ```
 
-Full schema for input/output: see `DATA-SCHEMA.md`. Technical contracts (validation, retry, format errors): see `API-CONTRACTS.md`.
+Full schema for input/output: see `DATA-SCHEMA.md`. Technical contracts: see `API-CONTRACTS.md`.
+
+---
 
 ## 5. Risk Rules applied to this strategy
 
 | Parameter | Value |
 |---|---|
-| Risk per trade | 1.75% account (`RISK_PER_TRADE`) |
+| Risk per trade | 1.5% account (`RISK_PER_TRADE`) |
+| Max Trades per Day | 5 (`MAX_TRADES_PER_DAY`) |
+| Loss Cooldown | 2 hours after 2 consecutive losses |
 | Leverage | 1:50 |
 
-(Strict safety rules — never enter a trade blindly — are in `PROJECT-RULES.md`, and are not repeated here.)
+---
 
 ## 6. Strategy Changelog (parameters + backtest results)
-
-> This table is different from the `CHANGELOG.md` in the project root: `CHANGELOG.md` logs **code** changes, this table logs **strategy parameter** changes along with corresponding backtest results — for reference during optimization.
 
 | Version | Date | Changes | Reason | Backtest Results |
 |---|---|---|---|---|
@@ -80,9 +119,10 @@ Full schema for input/output: see `DATA-SCHEMA.md`. Technical contracts (validat
 | v1.1 | 2026-08-29 | Rule-based entry logic: RSI threshold 40/60 → 30/70 (matches Indicator Parameters) | Synchronized consistent oversold/overbought thresholds across all documents | Total Trades: 0 (Condition conflict: MA cross occurs at avg RSI 55.2/45.2, never <30 or >70) |
 | v1.2 | 2026-08-30 | Switched MA to EMA9/21, added RSI extreme touch lookback (20 candles), and candle close confirmation across EMA21 (5 candles window) | Fixed logic contradiction in v1.1 where RSI 30/70 and MA cross were mutually exclusive | Total Trades: 550, Win Rate: 38.7%, Profit Factor: 1.04, Net Profit: +$14,246.69 (+14.25%), Max Drawdown: -23.33%, Sharpe: 0.02 |
 | v1.3 | 2026-08-31 | EMA9/100, RSI 36/64 (lookback 18), SL 1.5 ATR / TP 1.1 ATR, Risk 1.75% per trade | Parameter optimization targeting ~66% Win Rate and 100% Net Profit with strictly controlled Drawdown | Total Trades: 352, Win Rate: 64.8%, Profit Factor: 1.34, Net Profit: +$104,732.62 (+104.73%), Max Drawdown: -12.71%, Sharpe: 0.15 |
+| v2.0 | 2026-09-01 | MTF H1 EMA50/200 Trend Filter, M5 EMA9/21 cross, RSI9 [40-65 buy / 35-60 sell], ADX14 > 20, SL 1.5 ATR / TP 1.1 ATR, Early Exit on reverse cross, Max 5 trades/day | Implemented multi-timeframe strategy based on `chien-luoc-ema-rsi-m5-bot.md` with tuned SL/TP | Total Trades: 205, Win Rate: 58.5%, Profit Factor: 1.23, Net Profit: +$30,848.78 (+30.85%), Max Drawdown: -15.93%, Sharpe: 0.10 |
 
-> When adding a new row: increment the version, clearly state the changed parameters, the reason for the change, and the backtest results (Win rate, Profit Factor, Max Drawdown, Sharpe) to compare with the baseline.
+---
 
 ## 7. Link to trade log
 
-Every record in `logs/trade_log.jsonl` and every `backtest_result.json` should have a `strategy_version` field that matches the version at the time of the run, to know which parameter set was used for that trade/result (see `DATA-SCHEMA.md`).
+Every record in `logs/trade_log.jsonl` and every `backtest_result.json` has a `strategy_version` field that matches the version at the time of the run, to know which parameter set was used for that trade/result (see `DATA-SCHEMA.md`).
