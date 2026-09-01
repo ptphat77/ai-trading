@@ -93,6 +93,7 @@ class BacktestEngine {
     let openPosition = null;
     const trades = [];
     const logs = [];
+    let aiCallCount = 0;
 
     // Tracking state for noise filters
     const dailyTradesCount = new Map(); // 'YYYY-MM-DD' -> count
@@ -367,40 +368,41 @@ class BacktestEngine {
           tp_atr_multiplier: defaultTpAtrMultiplier,
           reason: `Filter: ${filterReason}`
         };
-      } else if (mode === 'rule-based') {
-        decision = this._evaluateRuleBasedDecision(
+      } else {
+        const ruleBasedDecision = this._evaluateRuleBasedDecision(
           context,
           config,
           h1Trend,
           defaultSlAtrMultiplier,
           defaultTpAtrMultiplier
         );
-      } else {
-        // AI-simulated mode: Query AI on candidate signals or mocked tests
-        if (isMocked || maCross === 'bullish_cross' || maCross === 'bearish_cross') {
-          try {
-            if (config.AI_RATE_LIMIT_DELAY_MS > 0 && !isMocked) {
-              await new Promise(resolve => setTimeout(resolve, config.AI_RATE_LIMIT_DELAY_MS));
-            }
-            decision = await this.aiAgent.getDecision(context);
-          } catch (error) {
-            log('warn', 'AI decision error during backtest', { error: error.message });
-            decision = {
-              action: 'skip',
-              confidence: 0,
-              sl_atr_multiplier: defaultSlAtrMultiplier,
-              tp_atr_multiplier: defaultTpAtrMultiplier,
-              reason: `AI decision error: ${error.message}`
-            };
-          }
+
+        if (mode === 'rule-based') {
+          decision = ruleBasedDecision;
         } else {
-          decision = {
-            action: 'skip',
-            confidence: 0.0,
-            sl_atr_multiplier: defaultSlAtrMultiplier,
-            tp_atr_multiplier: defaultTpAtrMultiplier,
-            reason: 'No candidate MA cross trigger'
-          };
+          // AI-simulated mode: Only query AI when rule-based strategy triggers a valid Buy/Sell signal (or for mocked test objects)
+          if (isMocked || ruleBasedDecision.action === 'buy' || ruleBasedDecision.action === 'sell') {
+            try {
+              if (config.AI_RATE_LIMIT_DELAY_MS > 0 && !isMocked) {
+                await new Promise(resolve => setTimeout(resolve, config.AI_RATE_LIMIT_DELAY_MS));
+              }
+              decision = await this.aiAgent.getDecision(context);
+              if (!isMocked) {
+                console.log(`[AI #${++aiCallCount}] [${currentCandle.time}] Rule: ${ruleBasedDecision.action.toUpperCase()} -> AI: ${decision.action.toUpperCase()} (Conf: ${decision.confidence}) | Balance: $${currentBalance.toFixed(2)}`);
+              }
+            } catch (error) {
+              log('warn', 'AI decision error during backtest', { error: error.message });
+              decision = {
+                action: 'skip',
+                confidence: 0,
+                sl_atr_multiplier: defaultSlAtrMultiplier,
+                tp_atr_multiplier: defaultTpAtrMultiplier,
+                reason: `AI decision error: ${error.message}`
+              };
+            }
+          } else {
+            decision = ruleBasedDecision;
+          }
         }
       }
 

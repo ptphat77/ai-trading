@@ -128,20 +128,20 @@ Input/output schema: see `DATA-SCHEMA.md`. Prompt template and response contract
 
 - **SignalBuilder.js**: aggregates all indicators into 1 context object to send to the AI agent.
 - **RiskManager.js**: `calculateUnits(balance, riskPercent, sl_distance, price)` → number of units, enforces maximum risk per trade.
-- **TradingBot.js**: main loop (every 5 minutes):
+- **TradingBot.js**: main loop (every 5 minutes) using **2-Tier Decision Architecture**:
   1. Fetch latest M5 candles (+ H1 candles for MTF trend filter)
   2. Calculate EMA9/21 (M5), EMA50/200 (H1), RSI9, ADX14, ATR14
   3. Check open positions → if exists, skip
-  4. Build context → send to AI agent (via `AIAgentFactory.createAgent()`)
-  5. Receive decision
-  6. If buy/sell and confidence reaches threshold: calculate SL/TP by ATR, calculate units via RiskManager, place order
-  7. Log fully (including skip)
+  4. **Tier 1 (Strategy Hard Filters)**: Check H1 Trend + M5 EMA Cross + RSI Zone + ADX > 20. If not satisfied, skip immediately (0 API calls).
+  5. **Tier 2 (AI Decision Layer)**: If Tier 1 triggers a candidate Buy/Sell signal, send context to AI Agent (via `AIAgentFactory.createAgent()`) to validate candle structure, filter chop/wicks, and refine SL/TP.
+  6. Receive AI decision: if confidence reaches threshold, calculate SL/TP by ATR, calculate units via RiskManager, place order.
+  7. Log fully (including skip).
 
 ### Layer 5 — Backtest Engine (`src/backtest/`)
 
 - **BacktestEngine.js**: simulation on historical candle data loaded from `CsvDataClient`, 2 modes:
   - *Rule-based*: uses hard rules (EMA cross + RSI + ADX threshold) for fast testing, consumes no AI quota.
-  - *AI-simulated*: actual AI provider calls (whichever `AI_PROVIDER` is configured), used when needing to check prompt quality.
+  - *AI-simulated*: calls AI agent **only on valid Rule-Based Strategy signals** to validate prompt quality without wasting quota on invalid crosses.
   - Data source: `CsvDataClient.getCandles()` — iterates through the CSV window-by-window to simulate real-time candle flow.
 - **ReportGenerator.js**: calculates Win Rate, Profit Factor, Net Profit, Max Drawdown, Sharpe Ratio; exports `backtest_result.json` + prints to console.
 
@@ -157,15 +157,15 @@ flowchart TD
     B --> C[Calculate EMA9/21 M5 + EMA50/200 H1 + RSI9 + ADX14 + ATR14]
     C --> D{Has open position?}
     D -- Yes --> E[Skip - Wait to close]
-    D -- No --> F[Build Context]
-    F --> G[Send to AI Agent via AIAgentFactory]
-    G --> H{AI decision}
-    H -- skip --> I[Log: skip + reason]
-    H -- confidence < threshold --> I
-    H -- buy/sell --> J[Calculate SL/TP by ATR]
-    J --> K[Calculate Units by RiskManager]
-    K --> L[Place order via BrokerClient]
-    L --> M[Log fully]
+    D -- No --> F{Tier 1: Strategy Rule-Based Valid?}
+    F -- No: ADX<=20 / Ngược H1 / Sai RSI --> G[Local Skip - 0 API Call]
+    F -- Yes: Valid Buy/Sell Signal --> H[Tier 2: Send Context to AI Agent]
+    H --> I{AI decision}
+    I -- skip / low confidence --> J[Log: AI skip + reason]
+    I -- buy/sell approved --> K[Calculate Dynamic SL/TP by ATR]
+    K --> L[Calculate Units by RiskManager]
+    L --> M[Place order via BrokerClient]
+    M --> N[Log fully]
 ```
 
 ## 5. Design Principles
