@@ -96,6 +96,12 @@ describe('SignalBuilder', () => {
           rsi_touched_overbought: false,
           candle_close_vs_ma21: 'above',
           candle_close_vs_ma_slow: 'above',
+          candle_body: 'bullish',
+          candle_wick_rejection: 'none', // Because wick logic requires > 2x body now
+          body_to_atr_ratio: 0.54,
+          distance_to_ma21_atr: 15.78,
+          recent_swing_high: 2376,
+          recent_swing_low: 2348,
           h1_trend: 'neutral',
           h1_ema50: null,
           h1_ema200: null

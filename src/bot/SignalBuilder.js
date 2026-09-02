@@ -80,6 +80,36 @@ function buildContext(candles, config, h1Candles = null) {
     ? 'above'
     : (latestCandle.close < latestMASlow ? 'below' : 'equal');
 
+  const candleBodyDirection = latestCandle.close > latestCandle.open
+    ? 'bullish'
+    : (latestCandle.close < latestCandle.open ? 'bearish' : 'doji');
+
+  const totalRange = latestCandle.high - latestCandle.low;
+  const bodySize = Math.abs(latestCandle.close - latestCandle.open);
+  const upperWick = latestCandle.high - Math.max(latestCandle.open, latestCandle.close);
+  const lowerWick = Math.min(latestCandle.open, latestCandle.close) - latestCandle.low;
+  
+  // Wick rejection logic (only if wick is > 2x body)
+  let candleWickRejection = 'none';
+  if (totalRange > 0) {
+    if (lowerWick > bodySize * 2 && lowerWick > upperWick) {
+      candleWickRejection = 'bottom_wick';
+    } else if (upperWick > bodySize * 2 && upperWick > lowerWick) {
+      candleWickRejection = 'top_wick';
+    }
+  }
+
+  // Momentum metrics
+  const bodyToAtrRatio = latestATR > 0 ? Number((bodySize / latestATR).toFixed(2)) : 0;
+  const distanceToMa21 = Math.abs(latestCandle.close - latestMASlow);
+  const distanceToMa21Atr = latestATR > 0 ? Number((distanceToMa21 / latestATR).toFixed(2)) : 0;
+
+  // Market Structure (last 50 candles)
+  const lookbackSR = 50;
+  const recentSrCandles = candles.slice(-lookbackSR);
+  const recentSwingHigh = recentSrCandles.length > 0 ? Math.max(...recentSrCandles.map(c => c.high)) : latestCandle.high;
+  const recentSwingLow = recentSrCandles.length > 0 ? Math.min(...recentSrCandles.map(c => c.low)) : latestCandle.low;
+
   // Evaluate H1 trend
   const h1Data = h1Candles || resampleToH1(candles);
   const h1TrendInfo = evaluateH1Trend(
@@ -111,6 +141,12 @@ function buildContext(candles, config, h1Candles = null) {
       rsi_touched_overbought: rsiTouchedOverbought,
       candle_close_vs_ma21: candleCloseVsMaSlow,
       candle_close_vs_ma_slow: candleCloseVsMaSlow,
+      candle_body: candleBodyDirection,
+      candle_wick_rejection: candleWickRejection,
+      body_to_atr_ratio: bodyToAtrRatio,
+      distance_to_ma21_atr: distanceToMa21Atr,
+      recent_swing_high: recentSwingHigh,
+      recent_swing_low: recentSwingLow,
       h1_trend: h1TrendInfo.trend,
       h1_ema50: h1TrendInfo.emaFast,
       h1_ema200: h1TrendInfo.emaSlow

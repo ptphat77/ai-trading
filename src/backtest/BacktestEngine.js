@@ -334,6 +334,31 @@ class BacktestEngine {
         }
 
         const candleCloseVsMaSlow = currentCandle.close > currSlow ? 'above' : (currentCandle.close < currSlow ? 'below' : 'equal');
+        const candleBodyDirection = currentCandle.close > currentCandle.open
+          ? 'bullish'
+          : (currentCandle.close < currentCandle.open ? 'bearish' : 'doji');
+        const totalRange = currentCandle.high - currentCandle.low;
+        const bodySize = Math.abs(currentCandle.close - currentCandle.open);
+        const upperWick = currentCandle.high - Math.max(currentCandle.open, currentCandle.close);
+        const lowerWick = Math.min(currentCandle.open, currentCandle.close) - currentCandle.low;
+        
+        let candleWickRejection = 'none';
+        if (totalRange > 0) {
+          if (lowerWick > bodySize * 2 && lowerWick > upperWick) {
+            candleWickRejection = 'bottom_wick';
+          } else if (upperWick > bodySize * 2 && upperWick > lowerWick) {
+            candleWickRejection = 'top_wick';
+          }
+        }
+
+        const bodyToAtrRatio = currAtr > 0 ? Number((bodySize / currAtr).toFixed(2)) : 0;
+        const distanceToMa21 = Math.abs(currentCandle.close - currSlow);
+        const distanceToMa21Atr = currAtr > 0 ? Number((distanceToMa21 / currAtr).toFixed(2)) : 0;
+
+        const lookbackSR = 50;
+        const recentSrCandles = candles.slice(Math.max(0, i - lookbackSR + 1), i + 1);
+        const recentSwingHigh = recentSrCandles.length > 0 ? Math.max(...recentSrCandles.map(c => c.high)) : currentCandle.high;
+        const recentSwingLow = recentSrCandles.length > 0 ? Math.min(...recentSrCandles.map(c => c.low)) : currentCandle.low;
 
         context = {
           symbol: config.SYMBOL || 'XAU_USD',
@@ -351,6 +376,12 @@ class BacktestEngine {
             rsi_zone: rsiZone,
             candle_close_vs_ma21: candleCloseVsMaSlow,
             candle_close_vs_ma_slow: candleCloseVsMaSlow,
+            candle_body: candleBodyDirection,
+            candle_wick_rejection: candleWickRejection,
+            body_to_atr_ratio: bodyToAtrRatio,
+            distance_to_ma21_atr: distanceToMa21Atr,
+            recent_swing_high: recentSwingHigh,
+            recent_swing_low: recentSwingLow,
             h1_trend: h1Trend,
             h1_ema50: h1FastVal ? Number(h1FastVal.toFixed(2)) : null,
             h1_ema200: h1SlowVal ? Number(h1SlowVal.toFixed(2)) : null
