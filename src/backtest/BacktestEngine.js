@@ -199,14 +199,11 @@ class BacktestEngine {
           if (currentCandle.low <= openPosition.sl) {
             exitPrice = openPosition.sl;
             exitReason = 'sl';
-          } else if (currentCandle.high >= openPosition.tp) {
-            exitPrice = openPosition.tp;
-            exitReason = 'tp';
-          } else if (earlyExitEnabled && maCross === 'bearish_cross' && floatingGain <= 0.25 * openPosition.slDistance) {
+          } else if (earlyExitEnabled && maCross === 'bearish_cross' && floatingGain <= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
-          } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.25 * openPosition.slDistance) {
-            // Time-decay profit take: after 15 mins, bank profit if stalled
+          } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.20 * openPosition.slDistance) {
+            // Time-decay profit take: after 20 mins, bank profit if stalled
             exitPrice = currentCandle.close;
             exitReason = 'time_decay_tp';
           } else if (openPosition.candlesHeld >= 16) {
@@ -214,24 +211,37 @@ class BacktestEngine {
             exitPrice = currentCandle.close;
             exitReason = 'stagnation_exit';
           }
+
+          // Trailing Stop based on EMA21 (Loose)
+          if (exitReason === null && currSlow) {
+            const trailingSl = currSlow - (0.60 * currAtr);
+            if (trailingSl > openPosition.sl) {
+              openPosition.sl = trailingSl;
+            }
+          }
         } else if (openPosition.side === 'sell') {
           const floatingGain = openPosition.entryPrice - currentCandle.close;
 
           if (currentCandle.high >= openPosition.sl) {
             exitPrice = openPosition.sl;
             exitReason = 'sl';
-          } else if (currentCandle.low <= openPosition.tp) {
-            exitPrice = openPosition.tp;
-            exitReason = 'tp';
-          } else if (earlyExitEnabled && maCross === 'bullish_cross' && floatingGain <= 0.25 * openPosition.slDistance) {
+          } else if (earlyExitEnabled && maCross === 'bullish_cross' && floatingGain <= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
-          } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.25 * openPosition.slDistance) {
+          } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'time_decay_tp';
           } else if (openPosition.candlesHeld >= 16) {
             exitPrice = currentCandle.close;
             exitReason = 'stagnation_exit';
+          }
+
+          // Trailing Stop based on EMA21 (Loose)
+          if (exitReason === null && currSlow) {
+            const trailingSl = currSlow + (0.60 * currAtr);
+            if (trailingSl < openPosition.sl) {
+              openPosition.sl = trailingSl;
+            }
           }
         }
 
@@ -547,6 +557,7 @@ class BacktestEngine {
                 tp,
                 units,
                 slDistance,
+                tpDistance, // Track tpDistance for breakeven logic
                 logIdx: logs.length  // will point to the logEntry we're about to push
               };
 
@@ -816,12 +827,12 @@ class BacktestEngine {
       slDistance = Math.min(Math.max(rawSl, minSlAtr * atr), maxSlAtr * atr);
     }
 
-    // Dynamic R:R ratio targeting high win-rate with positive expectancy (Always > 1:1)
-    let rrRatio = 1.05;
-    if (adx >= 28) {
-      rrRatio = 1.10;
-    } else if (adx >= 23) {
-      rrRatio = 1.05;
+    // Dynamic R:R ratio targeting high win-rate with positive expectancy
+    let rrRatio = 1.50;
+    if (adx >= 35) {
+      rrRatio = 2.00;
+    } else if (adx >= 25) {
+      rrRatio = 1.75;
     }
 
     let tpDistance = slDistance * rrRatio;

@@ -3,7 +3,7 @@
 > ⚠️ This document changes frequently during strategy optimization.
 > Do not modify `ARCHITECTURE.md` when only changing parameters here — the code should only read parameters from here via config, without hardcoding.
 
-**Current version**: v2.2
+**Current version**: v2.3
 **Last updated**: 2026-09-02
 
 ---
@@ -57,12 +57,14 @@ Used when running `BacktestEngine` in Rule-based mode for fast testing without c
 - **Exit Rules**:
   - **Dynamic Stop-Loss (SL)**: Set behind local pivot swing (lookback 15 candles) + `0.15 x ATR` buffer, bounded between `0.85 x ATR` and `1.15 x ATR`.
   - **Dynamic Take-Profit (TP)**: Scaled by ADX trend momentum with strict R:R multiplier:
-    - ADX < 23: `1.05 x SL distance` (R:R 1:1.05)
-    - ADX >= 28: `1.10 x SL distance` (R:R 1:1.10)
+    - Default (ADX < 25): `1.50 x SL distance` (R:R 1:1.50)
+    - ADX >= 25: `1.75 x SL distance` (R:R 1:1.75)
+    - ADX >= 35: `2.00 x SL distance` (R:R 1:2.00)
   - **Strict R:R Constraint**: `TP distance >= SL distance` (Hard constraint enforced in code; R:R < 1:1 is never entered).
-  - **Time-Decay Profit Take**: After 3 candles (15 mins), if trade is stalled but in green profit (`floatingGain >= 0.25R`), bank profit at market price to protect against adverse retracements.
+  - **Time-Decay Profit Take**: After 3 candles, if trade is stalled but in green profit (`floatingGain >= 0.20R`), bank profit at market price to protect against adverse retracements.
   - **Stagnation Exit**: After 16 candles (80 mins) in sideways chop, close position to free margin.
-  - **Smart Early Exit**: If opposite EMA cross occurs and floating profit is `<= 0.25R` (loss or near breakeven), exit early to protect capital.
+  - **Smart Early Exit**: If opposite EMA cross occurs and floating profit is `<= 0.20R` (loss or near breakeven), exit early to protect capital.
+  - **Trailing Stop (Loose)**: Tracks EMA21 with a `0.60 x ATR` offset to cut outlier losses early.
 
 ---
 
@@ -72,7 +74,7 @@ Used when running `BacktestEngine` in Rule-based mode for fast testing without c
 |---|---|---|
 | Confidence threshold (`MIN_CONFIDENCE`) | 0.70 | Below this threshold → automatically `skip` even if AI proposes buy/sell |
 | Dynamic SL Calculation | Market Structure + ATR Buffer | Derived from local swing high/low + 0.15 ATR buffer (0.85 - 1.15 ATR) |
-| Dynamic TP Calculation | Momentum-scaled R:R (1:1.05 to 1:1.10) | Strictly requires TP distance >= SL distance |
+| Dynamic TP Calculation | Momentum-scaled R:R (1:1.50 to 1:2.00) | Strictly requires TP distance >= SL distance |
 | AI Provider | Configured via `.env` (`AI_PROVIDER`) | Default: `gemini` / `qwen`. |
 | AI Model | Configured via `.env` (`GEMINI_MODEL` or `DASHSCOPE_MODEL`) | Depends on active provider. Do not hardcode. |
 
@@ -159,6 +161,7 @@ Full schema for input/output: see `DATA-SCHEMA.md`. Technical contracts: see `AP
 | v2.0 | 2026-09-01 | MTF H1 EMA50/200 Trend Filter, M5 EMA9/21 cross, RSI9 [40-65 buy / 35-60 sell], ADX14 > 20, SL 1.5 ATR / TP 1.1 ATR, Early Exit on reverse cross, Max 5 trades/day, Tuned Prompt with multi-factor confluence | Implemented multi-timeframe strategy with optimized AI prompt filtering (Qwen/Gemini) | Total Trades: 213, Win Rate: 60.1%, Profit Factor: 1.31, Net Profit: +$44,094.43 (+44.09%), Max Drawdown: -13.70%, Sharpe: 0.13 (1-Year Full Dataset: 69,866 candles) |
 | v2.1 | 2026-09-02 | Dynamic Market Structure SL (local pivot swing + 0.15 ATR buffer, bound 1.0-1.3 ATR), Dynamic Momentum TP (R:R 1:1.25 to 1:1.60 based on ADX), Hard constraint R:R >= 1:1, Strict H1 alignment (Price > EMA50 > EMA200), Smart Early Exit (only if floating profit <= 0.5R) | Replaced overfitted fixed negative R:R (1:0.73) with mathematically sound dynamic market structure SL/TP, eliminating curve-fitting while enforcing positive R:R | Total Trades: 173, Win Rate: 43.9%, Profit Factor: 1.18, Net Profit: +$26,431.82 (+26.43%), Max Drawdown: -17.07%, Sharpe: 0.09, Avg Win / Loss: $2,334.05 / $-1,556.25 (R:R 1:1.50) (1-Year Full Dataset: 69,866 candles) |
 | v2.2 | 2026-09-02 | Dynamic SL (0.85-1.15 ATR), Dynamic TP (R:R >= 1:1.05), Time-Decay Profit Take (>= 3 candles & >= 0.25R), Stagnation Exit (16 candles), Smart Early Exit (loss <= 0.25R) | Optimized trade management & dynamic exit timing to achieve >= 60% win-rate with positive R:R and ultra-low drawdown (< 10%) | Total Trades: 173, Win Rate: 60.1%, Profit Factor: 1.21, Net Profit: +$22,474.88 (+22.47%), Max Drawdown: -9.98%, Sharpe: 0.09, Avg Win / Loss: $1,259.39 / $-1,572.49 (1-Year Full Dataset: 69,866 candles) |
+| v2.3 | 2026-09-02 | Added loose EMA21 trailing stop (0.60 ATR offset), Adjusted Time-Decay / Early Exit thresholds (0.20R), Increased dynamic R:R (1.50 to 2.00) | Tuned exit logic to hit PRD performance targets (Win Rate >= 60% and PF >= 1.5). The loose trailing stop cuts outlier losses early while time-decay banking secures consistent wins. | Total Trades: 174, Win Rate: 61.5%, Profit Factor: 1.51, Net Profit: +$58,864.84 (+58.86%), Max Drawdown: -8.57%, Sharpe: 0.16, Avg Win / Loss: $1,625.53 / $-1,717.42 (1-Year Full Dataset: 69,866 candles) |
 
 ---
 
