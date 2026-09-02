@@ -44,6 +44,10 @@ This document finalizes the mandatory rules that must be followed throughout the
 
 - All **operational** parameters (risk %, confidence threshold, AI provider, AI model, symbol, timeframe, Broker base URL) are read from `.env` via `src/config.js` — not hardcoded in business logic.
 - All **strategy** parameters (MA period, RSI oversold/overbought, default ATR multiplier, prompt template) are defined and versioned in `STRATEGY.md`, applied to code via config — when optimizing strategy, edit `STRATEGY.md` first, code only reads from it.
+- **Strategy Versioning Convention**: Strategy versions must follow a 3-component SemVer format `v[CORE].[RULE].[PROMPT]` (e.g., `v2.3.1`).
+  - `CORE` (Major): Architecture/Core logic changes (e.g., timeframe switch).
+  - `RULE` (Minor): Rule-based parameter tweaks (e.g., RSI thresholds, MA periods).
+  - `PROMPT` (Patch): AI prompt template or confidence threshold changes.
 
 ## 5. Testing / Verification
 

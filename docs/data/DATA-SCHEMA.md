@@ -107,7 +107,7 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
   "action": "buy",
   "reason": "RSI oversold at 32.5, MA9 bullish cross MA21",
   "confidence": 0.85,
-  "strategy_version": "v2.0",
+  "strategy_version": "v2.0.0",
   "price": 2350.45,
   "sl": 2347.68,
   "tp": 2355.99,
@@ -124,7 +124,7 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
 ```
 
 - `ai_provider`: which provider generated the decision (e.g. `"qwen"`, `"gemini"`). Allows cross-referencing provider performance from logs.
-- `strategy_version`: matches the version in `STRATEGY.md` at the time of execution — for later cross-reference.
+- `strategy_version`: matches the version in `STRATEGY.md` at the time of execution (e.g., `v2.0.0`) — for later cross-reference.
 - `error`: `null` if normal; if there's an error (timeout, parse fail...) log a brief description, `action` will always be `"skip"`.
 
 ## 7. Backtest Result (`backtest_result.json`)
@@ -134,7 +134,7 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
   "period": { "from": "2024-01-01", "to": "2024-08-01" },
   "symbol": "XAU_USD",
   "timeframe": "M5",
-  "strategy_version": "v1.0",
+  "strategy_version": "v1.0.0",
   "mode": "rule-based",
   "totalTrades": 142,
   "winRate": 0.585,
