@@ -199,6 +199,9 @@ class BacktestEngine {
           if (currentCandle.low <= openPosition.sl) {
             exitPrice = openPosition.sl;
             exitReason = 'sl';
+          } else if (currentCandle.high >= openPosition.tp) {
+            exitPrice = openPosition.tp;
+            exitReason = 'tp';
           } else if (earlyExitEnabled && maCross === 'bearish_cross' && floatingGain <= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
@@ -225,6 +228,9 @@ class BacktestEngine {
           if (currentCandle.high >= openPosition.sl) {
             exitPrice = openPosition.sl;
             exitReason = 'sl';
+          } else if (currentCandle.low <= openPosition.tp) {
+            exitPrice = openPosition.tp;
+            exitReason = 'tp';
           } else if (earlyExitEnabled && maCross === 'bullish_cross' && floatingGain <= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';

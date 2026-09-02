@@ -20,7 +20,8 @@ describe('BacktestEngine', () => {
     RSI_OVERSOLD: 30,
     RSI_OVERBOUGHT: 70,
     DEFAULT_SL_ATR_MULTIPLIER: 1.0,
-    DEFAULT_TP_ATR_MULTIPLIER: 2.5
+    DEFAULT_TP_ATR_MULTIPLIER: 2.5,
+    MAX_TRADES_PER_DAY: 1
   };
 
   const generateMockCandles = (count, startPrice = 2000) => {
@@ -105,7 +106,9 @@ describe('BacktestEngine', () => {
         // Risk: 10000 * 0.01 = 100. SL distance: 2. Units = floor(100 / 2) = 50
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
         // Candle 5 (index 5) - hits TP (high reaches 2006 >= 2005)
-        { time: '2026-08-29T10:05:00Z', open: 2001, high: 2006, low: 2000, close: 2005, volume: 100 }
+        { time: '2026-08-29T10:05:00Z', open: 2001, high: 2006, low: 2000, close: 2005, volume: 100 },
+        // Candle 6 (index 6) - dummy to allow loop to evaluate index 5
+        { time: '2026-08-29T10:06:00Z', open: 2005, high: 2005, low: 2005, close: 2005, volume: 100 }
       ];
 
       mockDataClient.getCandles.mockResolvedValue(candles);
@@ -115,10 +118,12 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          h1_trend: 'uptrend',
           ma9: 2005,
           ma21: 1995,
           ma_cross: 'bullish_cross',
           rsi: 25,
+          adx: 25,
           atr: 2
         }
       });
@@ -146,7 +151,9 @@ describe('BacktestEngine', () => {
         // Candle 4: Triggers BUY
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
         // Candle 5: Drops below SL (low 1996 <= 1997)
-        { time: '2026-08-29T10:05:00Z', open: 1999, high: 2000, low: 1996, close: 1997, volume: 100 }
+        { time: '2026-08-29T10:05:00Z', open: 1999, high: 2000, low: 1996, close: 1997, volume: 100 },
+        // Candle 6 (index 6) - dummy to allow loop to evaluate index 5
+        { time: '2026-08-29T10:06:00Z', open: 2000, high: 2000, low: 2000, close: 2000, volume: 100 }
       ];
 
       mockDataClient.getCandles.mockResolvedValue(candles);
@@ -185,7 +192,9 @@ describe('BacktestEngine', () => {
         // Candle 4: Triggers SELL. Entry: 2000, ATR: 2 -> SL: 2002, TP: 1995. Units: 50
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
         // Candle 5: Hits SELL TP (low reaches 1994 <= 1995)
-        { time: '2026-08-29T10:05:00Z', open: 1998, high: 1999, low: 1994, close: 1995, volume: 100 }
+        { time: '2026-08-29T10:05:00Z', open: 1998, high: 1999, low: 1994, close: 1995, volume: 100 },
+        // Candle 6 (index 6) - dummy to allow loop to evaluate index 5
+        { time: '2026-08-29T10:06:00Z', open: 2000, high: 2000, low: 2000, close: 2000, volume: 100 }
       ];
 
       mockDataClient.getCandles.mockResolvedValue(candles);
@@ -195,10 +204,12 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          h1_trend: 'downtrend',
           ma9: 1995,
           ma21: 2005,
           ma_cross: 'bearish_cross',
           rsi: 75,
+          adx: 25,
           atr: 2
         }
       });
@@ -264,7 +275,9 @@ describe('BacktestEngine', () => {
         // Candle 4: AI triggers BUY
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
         // Candle 5: Hits TP
-        { time: '2026-08-29T10:05:00Z', open: 2001, high: 2006, low: 2000, close: 2005, volume: 100 }
+        { time: '2026-08-29T10:05:00Z', open: 2001, high: 2006, low: 2000, close: 2005, volume: 100 },
+        // Candle 6: Dummy to allow loop to evaluate index 5
+        { time: '2026-08-29T10:06:00Z', open: 2000, high: 2000, low: 2000, close: 2000, volume: 100 }
       ];
 
       mockDataClient.getCandles.mockResolvedValue(candles);
@@ -302,7 +315,7 @@ describe('BacktestEngine', () => {
     });
 
     it('should skip trade when Gemini confidence is below MIN_CONFIDENCE', async () => {
-      const candles = generateMockCandles(6);
+      const candles = generateMockCandles(10);
       mockDataClient.getCandles.mockResolvedValue(candles);
 
       buildContext.mockReturnValue({
@@ -336,7 +349,7 @@ describe('BacktestEngine', () => {
     });
 
     it('should safely handle Gemini API failure during backtest simulation', async () => {
-      const candles = generateMockCandles(6);
+      const candles = generateMockCandles(10);
       mockDataClient.getCandles.mockResolvedValue(candles);
 
       buildContext.mockReturnValue({

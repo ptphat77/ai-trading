@@ -38,8 +38,6 @@ class BaseAIAgent {
       if (
         !decision.action ||
         typeof decision.confidence !== 'number' ||
-        typeof decision.sl_atr_multiplier !== 'number' ||
-        typeof decision.tp_atr_multiplier !== 'number' ||
         !decision.reason
       ) {
         throw new Error('Missing or invalid field type in response');
@@ -55,10 +53,7 @@ class BaseAIAgent {
         throw new Error(`Confidence out of bounds: ${decision.confidence}`);
       }
 
-      // 4. Validate SL/TP multipliers
-      if (decision.sl_atr_multiplier <= 0 || decision.tp_atr_multiplier <= 0) {
-        throw new Error('SL/TP multipliers must be positive');
-      }
+
 
       // 5. Apply MIN_CONFIDENCE safety fallback
       if (decision.confidence < config.MIN_CONFIDENCE) {
