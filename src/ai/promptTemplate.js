@@ -34,8 +34,9 @@ Your primary mission is HIGH-PRECISION SIGNAL FILTERING — eliminating false br
    - Neutral MA cross: If \`indicators.ma_cross === 'neutral'\` -> ALWAYS "skip".
 
 4. Dynamic Risk Parameters & Confidence Calibration:
-   - sl_atr_multiplier: Propose optimal SL multiplier. Keep it flexible, usually around 1.5, adjusting based on \`recent_swing_high\`/\`low\` proximity and \`atr\` volatility.
-   - tp_atr_multiplier: Propose optimal TP multiplier. Keep it flexible, usually around 1.1, adjusting based on trend momentum (\`adx\`) and room to structural resistance/support.
+   - sl_atr_multiplier: Propose a dynamic multiplier based on distance to recent_swing_high/low + a small buffer.
+   - tp_atr_multiplier: Propose a dynamic multiplier based on momentum.
+   - MANDATORY RULE: Your proposed TP distance MUST be >= SL distance (Risk-Reward >= 1:1). If the market structure does not allow a 1:1 ratio before hitting major resistance/support, you MUST output "action": "skip".
    - Confidence scoring:
      * 0.80 - 1.00: High confidence (Clear H1 trend alignment + fresh M5 cross + RSI in sweet spot + ADX > 20 + solid candle confirmation + room to swing high/low).
      * 0.70 - 0.79: Valid setup meeting all confluence rules.

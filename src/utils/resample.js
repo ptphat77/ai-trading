@@ -90,9 +90,9 @@ function evaluateH1Trend(h1Candles, currentPrice, fastPeriod = 50, slowPeriod = 
   const latestEmaSlow = emaSlowArray[emaSlowArray.length - 1];
 
   let trend = 'neutral';
-  if (currentPrice > latestEmaSlow && latestEmaFast > latestEmaSlow) {
+  if (currentPrice > latestEmaFast && latestEmaFast > latestEmaSlow) {
     trend = 'uptrend';
-  } else if (currentPrice < latestEmaSlow && latestEmaFast < latestEmaSlow) {
+  } else if (currentPrice < latestEmaFast && latestEmaFast < latestEmaSlow) {
     trend = 'downtrend';
   }
 

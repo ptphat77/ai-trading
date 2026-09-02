@@ -19,7 +19,7 @@ describe('BacktestEngine', () => {
     MIN_CONFIDENCE: 0.7,
     RSI_OVERSOLD: 30,
     RSI_OVERBOUGHT: 70,
-    DEFAULT_SL_ATR_MULTIPLIER: 1.5,
+    DEFAULT_SL_ATR_MULTIPLIER: 1.0,
     DEFAULT_TP_ATR_MULTIPLIER: 2.5
   };
 
@@ -101,8 +101,8 @@ describe('BacktestEngine', () => {
         { time: '2026-08-29T10:02:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
         { time: '2026-08-29T10:03:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
         // Candle 4 (index 4) - triggers BUY (window size = 5)
-        // Entry price: 2000, ATR: 2 -> SL: 2000 - 1.5*2 = 1997, TP: 2000 + 2.5*2 = 2005
-        // Risk: 10000 * 0.01 = 100. SL distance: 3. Units = floor(100 / 3) = 33
+        // Entry price: 2000, ATR: 2 -> SL: 2000 - 1.0*2 = 1998, TP: 2000 + 2.5*2 = 2005
+        // Risk: 10000 * 0.01 = 100. SL distance: 2. Units = floor(100 / 2) = 50
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
         // Candle 5 (index 5) - hits TP (high reaches 2006 >= 2005)
         { time: '2026-08-29T10:05:00Z', open: 2001, high: 2006, low: 2000, close: 2005, volume: 100 }
@@ -132,9 +132,9 @@ describe('BacktestEngine', () => {
       expect(trade.entryPrice).toBe(2000);
       expect(trade.exitPrice).toBe(2005);
       expect(trade.exitReason).toBe('tp');
-      expect(trade.units).toBe(33);
-      expect(trade.profit).toBe(165); // (2005 - 2000) * 33 = 165
-      expect(result.finalBalance).toBe(10165);
+      expect(trade.units).toBe(50);
+      expect(trade.profit).toBe(250); // (2005 - 2000) * 50 = 250
+      expect(result.finalBalance).toBe(10250);
     });
 
     it('should open BUY position and close on SL when price drops below stop loss', async () => {
@@ -170,10 +170,10 @@ describe('BacktestEngine', () => {
       expect(result.trades.length).toBe(1);
       const trade = result.trades[0];
       expect(trade.side).toBe('buy');
-      expect(trade.exitPrice).toBe(1997);
+      expect(trade.exitPrice).toBe(1998);
       expect(trade.exitReason).toBe('sl');
-      expect(trade.profit).toBe(-99); // (1997 - 2000) * 33 = -99
-      expect(result.finalBalance).toBe(9901);
+      expect(trade.profit).toBe(-100); // (1998 - 2000) * 50 = -100
+      expect(result.finalBalance).toBe(9900);
     });
 
     it('should open SELL position and close on TP when bearish cross & RSI > overbought', async () => {
@@ -182,7 +182,7 @@ describe('BacktestEngine', () => {
         { time: '2026-08-29T10:01:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
         { time: '2026-08-29T10:02:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
         { time: '2026-08-29T10:03:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
-        // Candle 4: Triggers SELL. Entry: 2000, ATR: 2 -> SL: 2003, TP: 1995. Units: 33
+        // Candle 4: Triggers SELL. Entry: 2000, ATR: 2 -> SL: 2002, TP: 1995. Units: 50
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
         // Candle 5: Hits SELL TP (low reaches 1994 <= 1995)
         { time: '2026-08-29T10:05:00Z', open: 1998, high: 1999, low: 1994, close: 1995, volume: 100 }
@@ -212,8 +212,8 @@ describe('BacktestEngine', () => {
       expect(trade.entryPrice).toBe(2000);
       expect(trade.exitPrice).toBe(1995);
       expect(trade.exitReason).toBe('tp');
-      expect(trade.profit).toBe(165); // (2000 - 1995) * 33 = 165
-      expect(result.finalBalance).toBe(10165);
+      expect(trade.profit).toBe(250); // (2000 - 1995) * 50 = 250
+      expect(result.finalBalance).toBe(10250);
     });
 
     it('should never open a second position while one is active', async () => {
@@ -222,10 +222,10 @@ describe('BacktestEngine', () => {
         { time: '2026-08-29T10:01:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
         { time: '2026-08-29T10:02:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
         { time: '2026-08-29T10:03:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
-        // Candle 4: Triggers BUY (SL: 1997, TP: 2005)
+        // Candle 4: Triggers BUY (SL: 1998, TP: 2005)
         { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
-        // Candle 5: Price neither hits SL nor TP (stays between 1998 and 2002)
-        { time: '2026-08-29T10:05:00Z', open: 2000, high: 2002, low: 1998, close: 2001, volume: 100 },
+        // Candle 5: Price neither hits SL nor TP (stays between 1999 and 2002)
+        { time: '2026-08-29T10:05:00Z', open: 2000, high: 2002, low: 1999, close: 2001, volume: 100 },
         // Candle 6: Still in position, hits TP
         { time: '2026-08-29T10:06:00Z', open: 2002, high: 2006, low: 2001, close: 2005, volume: 100 }
       ];
@@ -283,7 +283,7 @@ describe('BacktestEngine', () => {
       mockGeminiAgent.getDecision.mockResolvedValue({
         action: 'buy',
         confidence: 0.85,
-        sl_atr_multiplier: 1.5,
+        sl_atr_multiplier: 1.0,
         tp_atr_multiplier: 2.5,
         reason: 'Strong momentum confirmed by AI'
       });
@@ -319,7 +319,7 @@ describe('BacktestEngine', () => {
       mockGeminiAgent.getDecision.mockResolvedValue({
         action: 'buy',
         confidence: 0.5, // below 0.70 threshold
-        sl_atr_multiplier: 1.5,
+        sl_atr_multiplier: 1.0,
         tp_atr_multiplier: 2.5,
         reason: 'Uncertain'
       });

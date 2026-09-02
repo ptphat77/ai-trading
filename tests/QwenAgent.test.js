@@ -56,7 +56,7 @@ describe('QwenAgent', () => {
     setupMockResponse({
       action: 'buy',
       confidence: 0.85,
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 1.8,
       reason: 'Strong bullish alignment on H1 and M5'
     });
@@ -65,7 +65,7 @@ describe('QwenAgent', () => {
 
     expect(result.action).toBe('buy');
     expect(result.confidence).toBe(0.85);
-    expect(result.sl_atr_multiplier).toBe(1.5);
+    expect(result.sl_atr_multiplier).toBe(1.0);
     expect(result.tp_atr_multiplier).toBe(1.8);
     expect(result.reason).toContain('bullish alignment');
   });
@@ -100,7 +100,7 @@ describe('QwenAgent', () => {
     setupMockResponse({
       action: 'buy',
       confidence: 0.55, // config.MIN_CONFIDENCE is 0.7
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 1.8,
       reason: 'Weak breakout'
     });
@@ -127,7 +127,7 @@ describe('QwenAgent', () => {
     setupMockResponse({
       action: 'buy',
       // confidence is missing
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 1.8,
       reason: 'Missing confidence'
     });
@@ -142,7 +142,7 @@ describe('QwenAgent', () => {
     setupMockResponse({
       action: 'buy',
       confidence: 1.5, // > 1.0
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 1.8,
       reason: 'Overconfident'
     });
@@ -156,7 +156,7 @@ describe('QwenAgent', () => {
     setupMockResponse({
       action: 'hold', // Invalid action
       confidence: 0.9,
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 1.8,
       reason: 'Holding'
     });

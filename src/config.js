@@ -28,7 +28,7 @@ const config = {
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
 
   // --- Strategy ---
-  STRATEGY_VERSION: process.env.STRATEGY_VERSION || 'v2.0',
+  STRATEGY_VERSION: process.env.STRATEGY_VERSION || 'v2.2',
   SYMBOL: process.env.SYMBOL || 'XAU_USD',
   TIMEFRAME: process.env.TIMEFRAME || 'M5',
   CANDLE_COUNT: parseInt(process.env.CANDLE_COUNT, 10) || 300,

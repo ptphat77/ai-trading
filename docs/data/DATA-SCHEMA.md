@@ -82,9 +82,9 @@ This document defines the data structures (schema) exchanged between components 
 ```json
 {
   "action": "buy",
-  "confidence": 0.82,
-  "sl_atr_multiplier": 1.5,
-  "tp_atr_multiplier": 3.0,
+  "confidence": 0.85,
+  "sl_atr_multiplier": 1.0,
+  "tp_atr_multiplier": 1.5,
   "reason": "RSI oversold at 32.5, MA9 bullish cross MA21, momentum is increasing"
 }
 ```
@@ -106,7 +106,7 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
   "ai_provider": "qwen",
   "action": "buy",
   "reason": "RSI oversold at 32.5, MA9 bullish cross MA21",
-  "confidence": 0.82,
+  "confidence": 0.85,
   "strategy_version": "v2.0",
   "price": 2350.45,
   "sl": 2347.68,
@@ -114,9 +114,9 @@ Each line is 1 JSON object, logged for **every** decision including `skip`:
   "units": 12,
   "ai_raw_response": {
     "action": "buy",
-    "confidence": 0.82,
-    "sl_atr_multiplier": 1.5,
-    "tp_atr_multiplier": 3.0,
+    "confidence": 0.85,
+    "sl_atr_multiplier": 1.0,
+    "tp_atr_multiplier": 1.5,
     "reason": "..."
   },
   "error": null

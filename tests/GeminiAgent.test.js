@@ -50,7 +50,7 @@ describe('GeminiAgent', () => {
     setupMockResponse({
       action: 'buy',
       confidence: 0.85,
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 2.5,
       reason: 'Looks good'
     });
@@ -59,7 +59,7 @@ describe('GeminiAgent', () => {
     
     expect(result.action).toBe('buy');
     expect(result.confidence).toBe(0.85);
-    expect(result.sl_atr_multiplier).toBe(1.5);
+    expect(result.sl_atr_multiplier).toBe(1.0);
     expect(result.tp_atr_multiplier).toBe(2.5);
   });
 
@@ -67,7 +67,7 @@ describe('GeminiAgent', () => {
     setupMockResponse({
       action: 'skip',
       confidence: 0.8,
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 2.5,
       reason: 'No clear trend'
     });
@@ -81,7 +81,7 @@ describe('GeminiAgent', () => {
     setupMockResponse({
       action: 'buy',
       confidence: 0.5, // config.MIN_CONFIDENCE is 0.7
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 2.5,
       reason: 'Weak signal'
     });
@@ -110,7 +110,7 @@ describe('GeminiAgent', () => {
     setupMockResponse({
       action: 'sell',
       // confidence is missing
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 2.5,
       reason: 'Missing confidence field'
     });
@@ -124,7 +124,7 @@ describe('GeminiAgent', () => {
     setupMockResponse({
       action: 'buy',
       confidence: 1.5, // > 1
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 2.5,
       reason: 'Overconfident'
     });
@@ -138,7 +138,7 @@ describe('GeminiAgent', () => {
     setupMockResponse({
       action: 'hold', // Invalid action
       confidence: 0.9,
-      sl_atr_multiplier: 1.5,
+      sl_atr_multiplier: 1.0,
       tp_atr_multiplier: 2.5,
       reason: 'Holding'
     });

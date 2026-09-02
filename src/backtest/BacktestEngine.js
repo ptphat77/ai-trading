@@ -190,7 +190,11 @@ class BacktestEngine {
         let exitPrice = null;
         let exitReason = null;
 
+        openPosition.candlesHeld = (openPosition.candlesHeld || 0) + 1;
+
         if (openPosition.side === 'buy') {
+          const floatingGain = currentCandle.close - openPosition.entryPrice;
+
           // Check SL first for risk safety
           if (currentCandle.low <= openPosition.sl) {
             exitPrice = openPosition.sl;
@@ -198,22 +202,36 @@ class BacktestEngine {
           } else if (currentCandle.high >= openPosition.tp) {
             exitPrice = openPosition.tp;
             exitReason = 'tp';
-          } else if (earlyExitEnabled && maCross === 'bearish_cross') {
-            // Early exit: EMA9 crosses below EMA21
+          } else if (earlyExitEnabled && maCross === 'bearish_cross' && floatingGain <= 0.25 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
+          } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.25 * openPosition.slDistance) {
+            // Time-decay profit take: after 15 mins, bank profit if stalled
+            exitPrice = currentCandle.close;
+            exitReason = 'time_decay_tp';
+          } else if (openPosition.candlesHeld >= 16) {
+            // Stagnation exit: after 80 mins in sideways chop, close position
+            exitPrice = currentCandle.close;
+            exitReason = 'stagnation_exit';
           }
         } else if (openPosition.side === 'sell') {
+          const floatingGain = openPosition.entryPrice - currentCandle.close;
+
           if (currentCandle.high >= openPosition.sl) {
             exitPrice = openPosition.sl;
             exitReason = 'sl';
           } else if (currentCandle.low <= openPosition.tp) {
             exitPrice = openPosition.tp;
             exitReason = 'tp';
-          } else if (earlyExitEnabled && maCross === 'bullish_cross') {
-            // Early exit: EMA9 crosses above EMA21
+          } else if (earlyExitEnabled && maCross === 'bullish_cross' && floatingGain <= 0.25 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
+          } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.25 * openPosition.slDistance) {
+            exitPrice = currentCandle.close;
+            exitReason = 'time_decay_tp';
+          } else if (openPosition.candlesHeld >= 16) {
+            exitPrice = currentCandle.close;
+            exitReason = 'stagnation_exit';
           }
         }
 
@@ -321,9 +339,9 @@ class BacktestEngine {
 
         if (h1FastVal !== null && h1SlowVal !== null) {
           const currentH1Close = h1Candles[currentH1Idx].close;
-          if (currentH1Close > h1SlowVal && h1FastVal > h1SlowVal) {
+          if (currentH1Close > h1FastVal && h1FastVal > h1SlowVal) {
             h1Trend = 'uptrend';
-          } else if (currentH1Close < h1SlowVal && h1FastVal < h1SlowVal) {
+          } else if (currentH1Close < h1FastVal && h1FastVal < h1SlowVal) {
             h1Trend = 'downtrend';
           } else {
             h1Trend = 'sideway';
@@ -360,6 +378,11 @@ class BacktestEngine {
         const recentSwingHigh = recentSrCandles.length > 0 ? Math.max(...recentSrCandles.map(c => c.high)) : currentCandle.high;
         const recentSwingLow = recentSrCandles.length > 0 ? Math.min(...recentSrCandles.map(c => c.low)) : currentCandle.low;
 
+        const lookbackLocal = 15;
+        const localCandles = candles.slice(Math.max(0, i - lookbackLocal + 1), i + 1);
+        const localSwingHigh = localCandles.length > 0 ? Math.max(...localCandles.map(c => c.high)) : currentCandle.high;
+        const localSwingLow = localCandles.length > 0 ? Math.min(...localCandles.map(c => c.low)) : currentCandle.low;
+
         context = {
           symbol: config.SYMBOL || 'XAU_USD',
           timeframe: config.TIMEFRAME || 'M5',
@@ -382,6 +405,8 @@ class BacktestEngine {
             distance_to_ma21_atr: distanceToMa21Atr,
             recent_swing_high: recentSwingHigh,
             recent_swing_low: recentSwingLow,
+            local_swing_high: localSwingHigh,
+            local_swing_low: localSwingLow,
             h1_trend: h1Trend,
             h1_ema50: h1FastVal ? Number(h1FastVal.toFixed(2)) : null,
             h1_ema200: h1SlowVal ? Number(h1SlowVal.toFixed(2)) : null
@@ -506,35 +531,40 @@ class BacktestEngine {
             tp = Number((currentPrice - tpDistance).toFixed(2));
           }
 
-          const units = calculateUnits(currentBalance, config.RISK_PER_TRADE, slDistance);
+          if (tpDistance < slDistance) {
+            decision.action = 'skip';
+            decision.reason = `Strict filter: R:R ratio is less than 1:1 (SL distance: ${slDistance}, TP distance: ${tpDistance})`;
+          } else {
+            const units = calculateUnits(currentBalance, config.RISK_PER_TRADE, slDistance);
 
-          if (units > 0) {
-            openPosition = {
-              symbol: config.SYMBOL,
-              side: decision.action,
-              entryPrice: currentPrice,
-              entryTime: currentCandle.time,
-              sl,
-              tp,
-              units,
-              slDistance,
-              logIdx: logs.length  // will point to the logEntry we're about to push
-            };
+            if (units > 0) {
+              openPosition = {
+                symbol: config.SYMBOL,
+                side: decision.action,
+                entryPrice: currentPrice,
+                entryTime: currentCandle.time,
+                sl,
+                tp,
+                units,
+                slDistance,
+                logIdx: logs.length  // will point to the logEntry we're about to push
+              };
 
-            // Compute rule-based SL/TP separately (using default config multipliers, not AI multipliers)
-            const ruleSlDistance = Number((defaultSlAtrMultiplier * atr).toFixed(2));
-            const ruleTpDistance = Number((defaultTpAtrMultiplier * atr).toFixed(2));
-            let ruleSl, ruleTp;
-            if (decision.action === 'buy') {
-              ruleSl = Number((currentPrice - ruleSlDistance).toFixed(2));
-              ruleTp = Number((currentPrice + ruleTpDistance).toFixed(2));
-            } else {
-              ruleSl = Number((currentPrice + ruleSlDistance).toFixed(2));
-              ruleTp = Number((currentPrice - ruleTpDistance).toFixed(2));
+              // Compute rule-based SL/TP separately (using default config multipliers, not AI multipliers)
+              const ruleSlDistance = Number((defaultSlAtrMultiplier * atr).toFixed(2));
+              const ruleTpDistance = Number((defaultTpAtrMultiplier * atr).toFixed(2));
+              let ruleSl, ruleTp;
+              if (decision.action === 'buy') {
+                ruleSl = Number((currentPrice - ruleSlDistance).toFixed(2));
+                ruleTp = Number((currentPrice + ruleTpDistance).toFixed(2));
+              } else {
+                ruleSl = Number((currentPrice + ruleSlDistance).toFixed(2));
+                ruleTp = Number((currentPrice - ruleTpDistance).toFixed(2));
+              }
+
+              executedOrder = { sl, tp, units, ruleSl, ruleTp, entryPrice: currentPrice, candleIdx: i };
+              dailyTradesCount.set(candleDateStr, todayTrades + 1);
             }
-
-            executedOrder = { sl, tp, units, ruleSl, ruleTp, entryPrice: currentPrice, candleIdx: i };
-            dailyTradesCount.set(candleDateStr, todayTrades + 1);
           }
         }
       }
@@ -669,44 +699,64 @@ class BacktestEngine {
     }
 
     // BUY Rule (chien-luoc-ema-rsi-m5-bot.md §3)
-    // 1. H1 is Uptrend
-    // 2. EMA9 crosses above EMA21 (bullish_cross)
-    // 3. RSI9 is within 40-65
-    // 4. ADX14 > 20
+    // BUY Rule:
+    // 1. H1 Uptrend
+    // 2. M5 Fresh Cross (bullish_cross)
+    // 3. RSI in sweet-spot [45, 68]
+    // 4. ADX > 20
+    // 5. Candle confirmation & not overextended from EMA21
+    // 6. No extreme spike candle
     const isH1Uptrend = h1Trend === 'uptrend';
+    const candleBody = indicators.candle_body;
+    const wickRejection = indicators.candle_wick_rejection;
+    const distanceToMa21Atr = indicators.distance_to_ma21_atr || 0;
+    const bodyToAtrRatio = indicators.body_to_atr_ratio || 0;
+    const isBullishCandle = candleBody === 'bullish' || wickRejection === 'bottom_wick';
+    const notOverextended = distanceToMa21Atr <= 1.2;
+    const notSpike = bodyToAtrRatio <= 2.2;
+
     if (
       isH1Uptrend &&
       maCross === 'bullish_cross' &&
       rsi >= rsiBuyMin &&
-      rsi <= rsiBuyMax
+      rsi <= rsiBuyMax &&
+      isBullishCandle &&
+      notOverextended
     ) {
+      const dynamic = this._calculateDynamicSlTp('buy', context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier);
       return {
         action: 'buy',
         confidence: 1.0,
-        sl_atr_multiplier: defaultSlAtrMultiplier,
-        tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based BUY: H1 Uptrend, EMA9 cross > EMA21, RSI (${rsi}) in [${rsiBuyMin}, ${rsiBuyMax}], ADX (${adx}) > ${adxThreshold}`
+        sl_atr_multiplier: dynamic.slMultiplier,
+        tp_atr_multiplier: dynamic.tpMultiplier,
+        reason: `Rule-based BUY: H1 Uptrend, EMA Cross, RSI (${rsi}) in [${rsiBuyMin}, ${rsiBuyMax}], ADX (${adx}) > ${adxThreshold} (RR: 1:${dynamic.rrRatio})`
       };
     }
 
-    // SELL Rule (chien-luoc-ema-rsi-m5-bot.md §3)
-    // 1. H1 is Downtrend
-    // 2. EMA9 crosses below EMA21 (bearish_cross)
-    // 3. RSI9 is within 35-60
-    // 4. ADX14 > 20
+    // SELL Rule:
+    // 1. H1 Downtrend
+    // 2. M5 Fresh Cross (bearish_cross)
+    // 3. RSI in sweet-spot [35, 60]
+    // 4. ADX > 20
+    // 5. Candle confirmation & not overextended from EMA21
     const isH1Downtrend = h1Trend === 'downtrend';
+    const isBearishCandle = candleBody === 'bearish' || wickRejection === 'top_wick';
+
     if (
       isH1Downtrend &&
       maCross === 'bearish_cross' &&
       rsi >= rsiSellMin &&
-      rsi <= rsiSellMax
+      rsi <= rsiSellMax &&
+      isBearishCandle &&
+      notOverextended
     ) {
+      const dynamic = this._calculateDynamicSlTp('sell', context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier);
       return {
         action: 'sell',
         confidence: 1.0,
-        sl_atr_multiplier: defaultSlAtrMultiplier,
-        tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based SELL: H1 Downtrend, EMA9 cross < EMA21, RSI (${rsi}) in [${rsiSellMin}, ${rsiSellMax}], ADX (${adx}) > ${adxThreshold}`
+        sl_atr_multiplier: dynamic.slMultiplier,
+        tp_atr_multiplier: dynamic.tpMultiplier,
+        reason: `Rule-based SELL: H1 Downtrend, EMA Cross, RSI (${rsi}) in [${rsiSellMin}, ${rsiSellMax}], ADX (${adx}) > ${adxThreshold} (RR: 1:${dynamic.rrRatio})`
       };
     }
 
@@ -738,6 +788,58 @@ class BacktestEngine {
       sl_atr_multiplier: defaultSlAtrMultiplier,
       tp_atr_multiplier: defaultTpAtrMultiplier,
       reason: 'Rule-based: Setup condition not met'
+    };
+  }
+
+  /**
+   * Calculates dynamic SL and TP based on market structure (Swing High/Low) and ADX momentum.
+   * @private
+   */
+  _calculateDynamicSlTp(side, context, config, defaultSl, defaultTp) {
+    const currentPrice = context.currentPrice;
+    const atr = context.indicators.atr || 1.0;
+    const adx = context.indicators.adx || 20;
+    const swingHigh = context.indicators.local_swing_high || context.indicators.recent_swing_high || currentPrice;
+    const swingLow = context.indicators.local_swing_low || context.indicators.recent_swing_low || currentPrice;
+    const bufferAtr = config.SL_ATR_BUFFER ?? 0.15;
+    const minSlAtr = config.MIN_SL_ATR ?? 0.85;
+    const maxSlAtr = config.MAX_SL_ATR ?? 1.15;
+
+    let slDistance;
+    if (side === 'buy') {
+      const swingDist = currentPrice - swingLow;
+      const rawSl = swingDist > 0 ? (swingDist + bufferAtr * atr) : (defaultSl * atr);
+      slDistance = Math.min(Math.max(rawSl, minSlAtr * atr), maxSlAtr * atr);
+    } else {
+      const swingDist = swingHigh - currentPrice;
+      const rawSl = swingDist > 0 ? (swingDist + bufferAtr * atr) : (defaultSl * atr);
+      slDistance = Math.min(Math.max(rawSl, minSlAtr * atr), maxSlAtr * atr);
+    }
+
+    // Dynamic R:R ratio targeting high win-rate with positive expectancy (Always > 1:1)
+    let rrRatio = 1.05;
+    if (adx >= 28) {
+      rrRatio = 1.10;
+    } else if (adx >= 23) {
+      rrRatio = 1.05;
+    }
+
+    let tpDistance = slDistance * rrRatio;
+    
+    // Ensure strict minimum R:R of 1:1
+    if (tpDistance < slDistance) {
+      tpDistance = slDistance;
+    }
+
+    const slMultiplier = Number((slDistance / atr).toFixed(2));
+    const tpMultiplier = Number((tpDistance / atr).toFixed(2));
+
+    return {
+      slDistance: Number(slDistance.toFixed(2)),
+      tpDistance: Number(tpDistance.toFixed(2)),
+      slMultiplier,
+      tpMultiplier,
+      rrRatio
     };
   }
 }
