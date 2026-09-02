@@ -61,7 +61,8 @@ const config = {
   LOOP_INTERVAL_MS: parseInt(process.env.LOOP_INTERVAL_MS, 10) || 300000,
 
   // --- Chart Viewer ---
-  CHART_PORT: parseInt(process.env.CHART_PORT, 10) || 3400
+  CHART_PORT: parseInt(process.env.CHART_PORT, 10) || 3400,
+  TRADE_LOG_PATH: process.env.TRADE_LOG_PATH
 };
 
 module.exports = Object.freeze(config);

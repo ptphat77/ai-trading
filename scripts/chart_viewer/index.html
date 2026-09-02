@@ -153,6 +153,22 @@
       background: rgba(255, 255, 255, 0.05);
     }
 
+    .trade-mode-select {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+    }
+    
+    .trade-mode-select:focus {
+      border-color: var(--accent-color);
+    }
+
     /* --- Crosshair Info HUD Bar --- */
     .info-bar {
       background: var(--bg-primary);
@@ -239,6 +255,43 @@
       width: 100%;
       height: 100%;
     }
+    
+    #chart-viewport a {
+      display: none !important;
+    }
+
+    /* --- Trade Tooltip --- */
+    .trade-tooltip {
+      position: absolute;
+      display: none;
+      padding: 12px;
+      background: rgba(30, 34, 45, 0.95);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      z-index: 1000;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+    }
+    
+    .trade-tooltip.visible {
+      display: block;
+    }
+
+    .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 6px;
+    }
+    .tooltip-row:last-child {
+      margin-bottom: 0;
+    }
+    .tooltip-label { color: var(--text-secondary); }
+    .tooltip-val { font-weight: 600; text-align: right; }
 
     /* --- Loading / Overlay State --- */
     .overlay-message {
@@ -322,6 +375,11 @@
     </div>
 
     <div class="header-right">
+      <select id="trade-mode-select" class="trade-mode-select" onchange="onTradeModeChange(event)">
+        <option value="rule_base">All Rule Base</option>
+        <option value="ai_actual">AI Accepted Actual</option>
+        <option value="ai_simulated">AI Accepted Rule Simulated</option>
+      </select>
       <button class="fit-btn" onclick="resetZoom()">Fit All Candles</button>
     </div>
   </header>
@@ -367,6 +425,9 @@
       <h3 style="font-weight: 600;">Loading Candle Data...</h3>
       <p style="color: var(--text-secondary); font-size: 0.85rem;" id="loading-subtext">Fetching CSV from server...</p>
     </div>
+
+    <!-- Trade Tooltip -->
+    <div class="trade-tooltip" id="trade-tooltip"></div>
   </div>
 
   <script>
@@ -377,6 +438,10 @@
     let rsiData = [];
     let atrData = [];
     let lookupMap = new Map(); // timestamp -> { candle, emaFast, emaSlow, rsi, atr }
+    let tradeData = [];
+    let currentTradeMode = 'rule_base';
+    let tradeLookupMap = new Map(); // timestamp -> trade details for tooltip
+    let activePriceLines = []; // currently drawn SL/TP lines on hover
 
     let chartMain, chartRsi, chartAtr;
     let candleSeries, emaFastSeries, emaSlowSeries, rsiSeries, atrSeries;
@@ -740,15 +805,30 @@
       });
 
       // --- Synchronize Crosshairs Across All 3 Panels on Hover ---
+      function clearActivePriceLines() {
+        activePriceLines.forEach(line => {
+          try { candleSeries.removePriceLine(line); } catch(e) {}
+        });
+        activePriceLines = [];
+      }
+
       function syncCrosshair(sourceChart, param) {
         if (isSyncingCrosshair) return;
         isSyncingCrosshair = true;
 
-        if (!param || !param.time || !lookupMap.has(param.time)) {
+        const tooltipEl = document.getElementById('trade-tooltip');
+
+        if (!param || !param.time || !param.point || !lookupMap.has(param.time)) {
           showLatestHUD();
           if (sourceChart !== chartMain && chartMain) chartMain.clearCrosshairPosition();
           if (sourceChart !== chartRsi && chartRsi) chartRsi.clearCrosshairPosition();
           if (sourceChart !== chartAtr && chartAtr) chartAtr.clearCrosshairPosition();
+          
+          if (sourceChart === chartMain) {
+            clearActivePriceLines();
+            if (tooltipEl) tooltipEl.classList.remove('visible');
+          }
+          
           isSyncingCrosshair = false;
           return;
         }
@@ -760,6 +840,71 @@
         // Sync crosshair to Main Chart
         if (sourceChart !== chartMain && chartMain && data.candle) {
           chartMain.setCrosshairPosition(data.candle.close, t, candleSeries);
+        }
+
+        // Show trade tooltip and SL/TP lines if hovering on Main Chart
+        if (sourceChart === chartMain) {
+          if (tradeLookupMap.has(t)) {
+            const tData = tradeLookupMap.get(t);
+            clearActivePriceLines();
+            
+            if (tData.entry_price) {
+              activePriceLines.push(candleSeries.createPriceLine({
+                price: tData.entry_price, color: 'rgba(255, 255, 255, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid, title: 'ENTRY'
+              }));
+            }
+            if (tData.sl) {
+              activePriceLines.push(candleSeries.createPriceLine({
+                price: tData.sl, color: 'rgba(242, 54, 69, 0.7)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'SL'
+              }));
+            }
+            if (tData.tp) {
+              activePriceLines.push(candleSeries.createPriceLine({
+                price: tData.tp, color: 'rgba(8, 153, 129, 0.7)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'TP'
+              }));
+            }
+            
+            let outcomeColor = 'var(--text-primary)';
+            if (tData.outcome === 'win') outcomeColor = 'var(--bullish-color)';
+            if (tData.outcome === 'loss') outcomeColor = 'var(--bearish-color)';
+            
+            const exitStr = tData.exit_price ? `${priceFormatter.format(tData.exit_price)} <span style="font-size: 0.7rem; color: var(--text-muted)">(${tData.exit_reason || tData.outcome})</span>` : 'Open';
+            
+            tooltipEl.innerHTML = `
+              <div class="tooltip-row">
+                 <span class="tooltip-label">Trade</span>
+                 <span class="tooltip-val" style="color: ${outcomeColor}">${tData.side} ${tData.outcome ? '(' + tData.outcome.toUpperCase() + ')' : ''}</span>
+              </div>
+              <div class="tooltip-row">
+                 <span class="tooltip-label">Entry</span>
+                 <span class="tooltip-val">${priceFormatter.format(tData.entry_price)}</span>
+              </div>
+              <div class="tooltip-row">
+                 <span class="tooltip-label">SL</span>
+                 <span class="tooltip-val" style="color: var(--bearish-color)">${tData.sl ? priceFormatter.format(tData.sl) : '--'}</span>
+              </div>
+              <div class="tooltip-row">
+                 <span class="tooltip-label">TP</span>
+                 <span class="tooltip-val" style="color: var(--bullish-color)">${tData.tp ? priceFormatter.format(tData.tp) : '--'}</span>
+              </div>
+              <hr style="border-color: var(--border-color); margin: 6px 0; border-style: solid; border-width: 1px 0 0 0;" />
+              <div class="tooltip-row">
+                 <span class="tooltip-label">Exit</span>
+                 <span class="tooltip-val">${exitStr}</span>
+              </div>
+            `;
+            
+            // Adjust position so it doesn't overflow
+            let top = param.point.y + 15;
+            let left = param.point.x + 15;
+            
+            tooltipEl.style.left = left + 'px';
+            tooltipEl.style.top = top + 'px';
+            tooltipEl.classList.add('visible');
+          } else {
+            clearActivePriceLines();
+            tooltipEl.classList.remove('visible');
+          }
         }
 
         // Sync crosshair to RSI Chart
@@ -788,6 +933,10 @@
         if (chartRsi) chartRsi.clearCrosshairPosition();
         if (chartAtr) chartAtr.clearCrosshairPosition();
         showLatestHUD();
+        
+        clearActivePriceLines();
+        const tooltipEl = document.getElementById('trade-tooltip');
+        if (tooltipEl) tooltipEl.classList.remove('visible');
       });
 
       // Resize observer
@@ -869,6 +1018,73 @@
       if (candleData.length === 0) return;
       const latest = lookupMap.get(candleData[candleData.length - 1].time);
       updateHUD(latest);
+    }
+
+    // --- 4.5 Trade Marker Rendering ---
+    function renderTrades() {
+      if (!tradeData || tradeData.length === 0 || !candleSeries) return;
+      
+      const markers = [];
+      tradeLookupMap.clear();
+      
+      const tooltipEl = document.getElementById('trade-tooltip');
+      if (tooltipEl) tooltipEl.classList.remove('visible');
+      if (typeof clearActivePriceLines === 'function') clearActivePriceLines();
+      
+      tradeData.forEach(trade => {
+        let include = false;
+        let tradeDetails = null;
+        let outcome = '';
+        
+        if (currentTradeMode === 'rule_base') {
+          include = true;
+          tradeDetails = trade.rule_based;
+          outcome = trade.rule_based ? trade.rule_based.outcome : '';
+        } else if (currentTradeMode === 'ai_actual') {
+          include = trade.ai && trade.ai.accepted === true;
+          tradeDetails = trade.ai;
+          outcome = trade.ai ? trade.ai.outcome : '';
+        } else if (currentTradeMode === 'ai_simulated') {
+          include = trade.ai && trade.ai.accepted === true;
+          tradeDetails = trade.rule_based;
+          outcome = trade.rule_based ? trade.rule_based.outcome : '';
+        }
+        
+        if (!include || !tradeDetails) return;
+        
+        const timeSec = new Date(trade.time).getTime() / 1000;
+        
+        tradeLookupMap.set(timeSec, {
+          side: trade.side,
+          entry_price: trade.entry_price,
+          sl: tradeDetails.sl,
+          tp: tradeDetails.tp,
+          outcome: outcome,
+          exit_price: tradeDetails.exit_price,
+          exit_time: tradeDetails.exit_time,
+          exit_reason: tradeDetails.exit_reason
+        });
+        
+        let color = '#868993'; // still_open or unknown
+        if (outcome === 'win') color = '#089981';
+        if (outcome === 'loss') color = '#f23645';
+        
+        markers.push({
+          time: timeSec,
+          position: trade.side === 'BUY' ? 'belowBar' : 'aboveBar',
+          color: color,
+          shape: trade.side === 'BUY' ? 'arrowUp' : 'arrowDown',
+          text: trade.side,
+        });
+      });
+      
+      markers.sort((a, b) => a.time - b.time);
+      candleSeries.setMarkers(markers);
+    }
+
+    function onTradeModeChange(e) {
+      currentTradeMode = e.target.value;
+      renderTrades();
     }
 
     // --- 5. Data Loading & Binding ---
@@ -965,6 +1181,18 @@
             from: candleData[startIdx].time,
             to: candleData[candleData.length - 1].time + stepSec * 5,
           });
+        }
+
+        // Fetch Trades
+        try {
+          const tradesRes = await fetch('/api/trades');
+          if (tradesRes.ok) {
+            const tradesJson = await tradesRes.json();
+            tradeData = tradesJson.signals || [];
+            renderTrades();
+          }
+        } catch (e) {
+          console.warn('Failed to load trade log:', e);
         }
 
         // Hide Loader

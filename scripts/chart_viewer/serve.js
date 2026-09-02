@@ -13,6 +13,12 @@ function getResolvedCsvPath() {
     : path.resolve(process.cwd(), 'data/candles.csv');
 }
 
+function getResolvedTradeLogPath() {
+  return config.TRADE_LOG_PATH
+    ? path.resolve(process.cwd(), config.TRADE_LOG_PATH)
+    : null;
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const resolvedCsvPath = getResolvedCsvPath();
@@ -83,8 +89,34 @@ const server = http.createServer((req, res) => {
       rsiPeriod: config.RSI_PERIOD,
       rsiOversold: config.RSI_OVERSOLD,
       rsiOverbought: config.RSI_OVERBOUGHT,
-      atrPeriod: config.ATR_PERIOD
+      atrPeriod: config.ATR_PERIOD,
+      tradeLogPath: config.TRADE_LOG_PATH
     }));
+    return;
+  }
+
+  // Route: Serve Trade Log Data
+  if (url.pathname === '/api/trades') {
+    const tradeLogPath = getResolvedTradeLogPath();
+    if (!tradeLogPath || !fs.existsSync(tradeLogPath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        error: `Trade log file not found at: ${tradeLogPath}. Please check TRADE_LOG_PATH in your .env file.`
+      }));
+      return;
+    }
+
+    try {
+      const data = fs.readFileSync(tradeLogPath, 'utf8');
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-cache'
+      });
+      res.end(data);
+    } catch (readErr) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: `Error reading trade log file: ${readErr.message}` }));
+    }
     return;
   }
 
