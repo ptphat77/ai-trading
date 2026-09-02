@@ -59,10 +59,11 @@ Read `backtest_result.json` and present the results in the standard format:
    - **AI Acceptance Rate**: X% (Accepted / Total Rule Signals)
    - **Losses Avoided (True Negatives)**: X
    - **Wins Missed (False Negatives)**: Y
-   - **AI Ruined Wins (AI SL/TP caused loss)**: Z
-   - **AI Saved Losses (AI SL/TP caused win)**: W
    - **Verdict**: (e.g., `effective_loss_prevention` or `opportunity_cost_high`)
-4. Compare the Net Profit of `ai_accepted_actual` vs `ai_accepted_rule_simulated` to evaluate if the AI's dynamic SL/TP outperformed the rule-based SL/TP.
+4. Present an "Execution Engine Impact" report highlighting the effect of dynamic exits (Trailing Stop, Time-Decay) on the AI-accepted trades:
+   - **Engine Ruined Wins**: Z (Dynamic exit cut a trade early that would have hit static TP)
+   - **Engine Saved Losses**: W (Dynamic exit saved a trade that would have hit static SL)
+5. Compare the Net Profit of `ai_accepted_actual` vs `ai_accepted_rule_simulated` to evaluate if the Execution Engine's Dynamic Exits outperformed the static SL/TP baseline.
 
 Confirm the `strategy_version` in `backtest_result.json` matches the version in `STRATEGY.md`.
 

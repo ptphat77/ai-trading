@@ -217,8 +217,8 @@ function exportTradeLog(backtestResult, customConfig = {}, options = {}) {
   const rejectedThatWouldLose = rejectedEntries.filter(l => l.ruleBasedOutcome === 'loss').length;
   const rejectedOpen = rejectedEntries.filter(l => l.ruleBasedOutcome === 'open').length;
 
-  const acceptedAiRuinedWin = acceptedEntries.filter(l => l.ruleBasedOutcome === 'win' && l.aiOutcome === 'loss').length;
-  const acceptedAiSavedLoss = acceptedEntries.filter(l => l.ruleBasedOutcome === 'loss' && l.aiOutcome === 'win').length;
+  const engineRuinedWin = acceptedEntries.filter(l => l.ruleBasedOutcome === 'win' && l.aiOutcome === 'loss').length;
+  const engineSavedLoss = acceptedEntries.filter(l => l.ruleBasedOutcome === 'loss' && l.aiOutcome === 'win').length;
 
   const periodFrom = ruleSignals.length > 0
     ? (ruleSignals[0].timestamp || '').slice(0, 10)
@@ -305,12 +305,15 @@ function exportTradeLog(backtestResult, customConfig = {}, options = {}) {
         ai_rejected_rate_percent: totalRuleSignals > 0 ? Number((totalAiRejected / totalRuleSignals * 100).toFixed(1)) : 0,
         avoided_losses_true_negative: rejectedThatWouldLose,
         missed_wins_false_negative: rejectedThatWouldWin,
-        ai_ruined_win_count: acceptedAiRuinedWin,
-        ai_saved_loss_count: acceptedAiSavedLoss,
         still_open: rejectedOpen,
         filter_effectiveness_verdict: totalAiRejected > 0 && rejectedThatWouldLose > rejectedThatWouldWin
           ? 'effective_loss_prevention'
           : 'opportunity_cost_high'
+      },
+      execution_engine_impact: {
+        applied_to_trades: totalAiAccepted,
+        saved_loss_by_engine: engineSavedLoss,
+        ruined_win_by_engine: engineRuinedWin
       }
     },
     signals: formattedSignals
