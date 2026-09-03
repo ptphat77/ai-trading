@@ -3,7 +3,7 @@
 > ⚠️ This document changes frequently during strategy optimization.
 > Do not modify `ARCHITECTURE.md` when only changing parameters here — the code should only read parameters from here via config, without hardcoding.
 
-**Current version**: v2.3.1
+**Current version**: v2.4.4
 **Last updated**: 2026-09-02
 
 ---

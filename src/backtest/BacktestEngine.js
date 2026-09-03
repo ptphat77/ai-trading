@@ -490,7 +490,14 @@ class BacktestEngine {
               if (config.AI_RATE_LIMIT_DELAY_MS > 0 && !isMocked) {
                 await new Promise(resolve => setTimeout(resolve, config.AI_RATE_LIMIT_DELAY_MS));
               }
-              decision = await this.aiAgent.getDecision(context);
+              const aiDecision = await this.aiAgent.getDecision(context);
+              decision = {
+                ...ruleBasedDecision,
+                action: aiDecision.action,
+                confidence: aiDecision.confidence,
+                reason: aiDecision.reason,
+                gemini_raw_response: aiDecision
+              };
               if (!isMocked) {
                 console.log(`[AI #${++aiCallCount}] [${currentCandle.time}] Rule: ${ruleBasedDecision.action.toUpperCase()} -> AI: ${decision.action.toUpperCase()} (Conf: ${decision.confidence}) | Balance: $${currentBalance.toFixed(2)}`);
               }
