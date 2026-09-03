@@ -194,6 +194,33 @@ async function loadAllHistoryAndLiveCandles(symbol = 'XAU_USD', timeframe = 'M5'
   return csvCandles;
 }
 
+// Security: Sanitizers for public dashboard data
+function sanitizePositions(posArray) {
+  if (!posArray || !Array.isArray(posArray)) return [];
+  return posArray.map(p => ({
+    symbol: p.symbol,
+    type: p.type,
+    price_open: p.price_open,
+    sl: p.sl,
+    tp: p.tp,
+    price_current: p.price_current,
+    time: p.time
+  }));
+}
+
+function sanitizeHealth(health) {
+  if (!health) return null;
+  const safeHealth = JSON.parse(JSON.stringify(health));
+  if (safeHealth.account) {
+    delete safeHealth.account.login;
+    delete safeHealth.account.server;
+    delete safeHealth.account.balance;
+    delete safeHealth.account.equity;
+    delete safeHealth.account.leverage;
+  }
+  return safeHealth;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const resolvedCsvPath = getResolvedCsvPath();
@@ -242,7 +269,7 @@ const server = http.createServer(async (req, res) => {
           tick: tickData || null,
           candles: candleData,
           latestCandle: candleData[candleData.length - 1],
-          positions: posData || []
+          positions: sanitizePositions(posData)
         });
         return;
       }
@@ -299,7 +326,7 @@ const server = http.createServer(async (req, res) => {
             tick: tickData || null,
             candles: candleData,
             latestCandle: candleData[candleData.length - 1],
-            positions: posData || []
+            positions: sanitizePositions(posData)
           };
           if (!isClosed) {
             res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -334,7 +361,7 @@ const server = http.createServer(async (req, res) => {
     const symbol = url.searchParams.get('symbol');
     const endpoint = symbol ? `/positions?symbol=${encodeURIComponent(symbol)}` : '/positions';
     const posData = await fetchBridgeJson(endpoint, 2000);
-    sendJson(200, posData || []);
+    sendJson(200, sanitizePositions(posData));
     return;
   }
 
@@ -455,7 +482,7 @@ const server = http.createServer(async (req, res) => {
       bridge: {
         url: BRIDGE_URL,
         connected: !!(bridgeHealth && bridgeHealth.connected),
-        details: bridgeHealth || null
+        details: sanitizeHealth(bridgeHealth)
       },
       log: {
         active_path: config.TRADE_LOG_PATH,
