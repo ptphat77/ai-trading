@@ -252,8 +252,6 @@ class TradingBot {
     log('info', `Khởi động TradingBot... [Mode: ${mode}]`);
     notifier.sendAlert(`🟢 <b>TradeBot Khởi Động</b>\nChế độ: <b>${mode}</b>\nSymbol: ${this.config.SYMBOL} | Timeframe: ${this.config.TIMEFRAME}`);
 
-    const intervalMs = this.config.LOOP_INTERVAL_MS || 300000;
-
     const cycle = async () => {
       if (!this.isRunning) return;
       try {
@@ -262,19 +260,35 @@ class TradingBot {
         log('error', `Lỗi trong chu kỳ giao dịch: ${err.message}`);
         notifier.sendAlert(`🚨 <b>LỖI CHU KỲ BOT:</b> ${err.message}`);
       }
+      this._scheduleNextCycle();
     };
 
-    // Chạy chu kỳ đầu tiên ngay khi khởi động
-    await cycle();
+    this._scheduleNextCycle = () => {
+      if (!this.isRunning) return;
+      
+      const now = new Date();
+      // Calculate the next 5-minute boundary (e.g., 05, 10, 15, 20)
+      const currentMinute = now.getMinutes();
+      const nextMinute = Math.ceil((currentMinute + 1) / 5) * 5; 
+      
+      // Add a 5-second buffer to ensure the exchange's candle is fully closed and available via API
+      const nextTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), nextMinute, 5, 0);
+      
+      const delayMs = nextTime.getTime() - now.getTime();
+      
+      log('info', `[Sync] Đã đồng bộ đồng hồ. Kiểm tra nến tiếp theo lúc ${nextTime.toLocaleTimeString()} (đợi ${(delayMs/1000).toFixed(0)}s).`);
+      
+      this.timer = setTimeout(cycle, delayMs);
+    };
 
-    // Lặp định kỳ
-    this.timer = setInterval(cycle, intervalMs);
+    // Chạy ngay chu kỳ đầu tiên để test, sau đó tự động vào guồng đồng bộ giờ
+    await cycle();
   }
 
   stop() {
     this.isRunning = false;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
     }
     log('info', 'TradingBot đã dừng.');
   }
