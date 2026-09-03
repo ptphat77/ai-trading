@@ -476,37 +476,187 @@
       display: none !important;
     }
 
-    .trade-tooltip {
+    /* Pinned / Floating Signal Inspector Card */
+    .signal-inspector-card {
       position: absolute;
-      display: none;
-      padding: 12px;
-      background: rgba(24, 28, 39, 0.96);
+      top: 10px;
+      right: 96px;
+      z-index: 50;
+      width: 325px;
+      background: rgba(20, 24, 35, 0.94);
       border: 1px solid var(--border-color);
-      border-radius: 6px;
-      color: var(--text-primary);
+      border-radius: 8px;
+      padding: 12px 14px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-      z-index: 1000;
-      pointer-events: none;
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(8px);
-    }
-    
-    .trade-tooltip.visible {
-      display: block;
+      font-size: 0.74rem;
+      pointer-events: auto;
+      transition: all 0.2s ease;
     }
 
-    .tooltip-row {
+    .signal-inspector-card.bullish {
+      border-left: 4px solid var(--bullish-color);
+    }
+
+    .signal-inspector-card.bearish {
+      border-left: 4px solid var(--bearish-color);
+    }
+
+    .inspector-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+
+    .inspector-title {
+      font-weight: 700;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .inspector-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0 4px;
+      border-radius: 4px;
+      transition: all 0.15s;
+      line-height: 1;
+    }
+
+    .inspector-close-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      background: rgba(0, 0, 0, 0.28);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      margin-bottom: 8px;
+    }
+
+    .inspector-field {
       display: flex;
       justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 5px;
+      font-size: 0.72rem;
     }
-    .tooltip-row:last-child {
-      margin-bottom: 0;
+
+    .inspector-label {
+      color: var(--text-muted);
     }
-    .tooltip-label { color: var(--text-secondary); }
-    .tooltip-val { font-weight: 600; text-align: right; }
+
+    .inspector-value {
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .inspector-ai-section {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ai-decision-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .ai-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 800;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+    }
+
+    .ai-badge.buy {
+      background: var(--bullish-bg);
+      color: var(--bullish-color);
+      border: 1px solid rgba(8, 153, 129, 0.4);
+    }
+
+    .ai-badge.sell {
+      background: var(--bearish-bg);
+      color: var(--bearish-color);
+      border: 1px solid rgba(242, 54, 69, 0.4);
+    }
+
+    .ai-badge.skip {
+      background: rgba(134, 137, 147, 0.15);
+      color: var(--text-secondary);
+      border: 1px solid rgba(134, 137, 147, 0.35);
+    }
+
+    .ai-reason-card {
+      background: rgba(41, 98, 255, 0.06);
+      border: 1px solid rgba(41, 98, 255, 0.2);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .btn-reconsult {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: #82b1ff;
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+
+    .btn-reconsult:hover {
+      background: rgba(41, 98, 255, 0.2);
+      border-color: rgba(41, 98, 255, 0.5);
+      color: #fff;
+    }
+
+    .ai-loading-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #82b1ff;
+      font-size: 0.72rem;
+      padding: 6px 0;
+    }
+
+    .mini-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(130, 177, 255, 0.3);
+      border-top-color: #82b1ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
 
     /* --- VIEW 2: Dashboard Section --- */
     .dashboard-scroll {
@@ -836,6 +986,7 @@
         <div class="chart-container" id="chart-viewport">
           <div class="panel-wrapper main-panel" id="main-panel-wrapper">
             <div class="panel-title-badge" id="main-badge">XAU/USD • EMA 9 / 21</div>
+            <div class="signal-inspector-card" id="signal-inspector-card" style="display: none;"></div>
             <div id="chart-main" class="chart-div"></div>
           </div>
 
@@ -848,8 +999,6 @@
             <div class="panel-title-badge" id="atr-badge" style="color: var(--atr-color);">ATR (14)</div>
             <div id="chart-atr" class="chart-div"></div>
           </div>
-
-          <div class="trade-tooltip" id="trade-tooltip"></div>
         </div>
       </div>
 
@@ -1294,65 +1443,6 @@
         });
       });
 
-      // Synchronize crosshairs
-      function clearActivePriceLines() {
-        activePriceLines.forEach(line => { try { candleSeries.removePriceLine(line); } catch(e){} });
-        activePriceLines = [];
-      }
-
-      function syncCrosshair(sourceChart, param) {
-        if (isSyncingCrosshair) return;
-        isSyncingCrosshair = true;
-        const tooltipEl = document.getElementById('trade-tooltip');
-
-        if (!param || !param.time || !param.point || !lookupMap.has(param.time)) {
-          isCrosshairUserHovering = false;
-          showLatestHUD();
-          if (sourceChart !== chartMain) chartMain.clearCrosshairPosition();
-          if (sourceChart !== chartRsi) chartRsi.clearCrosshairPosition();
-          if (sourceChart !== chartAtr) chartAtr.clearCrosshairPosition();
-          if (sourceChart === chartMain) {
-            clearActivePriceLines();
-            if (tooltipEl) tooltipEl.classList.remove('visible');
-          }
-          isSyncingCrosshair = false;
-          return;
-        }
-
-        isCrosshairUserHovering = true;
-        const t = param.time;
-        const data = lookupMap.get(t);
-        updateHUD(data);
-
-        if (sourceChart !== chartMain && data.candle) chartMain.setCrosshairPosition(data.candle.close, t, candleSeries);
-        if (sourceChart !== chartRsi) chartRsi.setCrosshairPosition(data.rsi || 50, t, rsiSeries);
-        if (sourceChart !== chartAtr) chartAtr.setCrosshairPosition(data.atr || 0, t, atrSeries);
-
-        if (sourceChart === chartMain && tradeLookupMap.has(t)) {
-          const tData = tradeLookupMap.get(t);
-          clearActivePriceLines();
-          if (tData.entry_price) activePriceLines.push(candleSeries.createPriceLine({ price: tData.entry_price, color: 'rgba(255,255,255,0.7)', lineWidth: 1, title: 'ENTRY' }));
-          if (tData.sl) activePriceLines.push(candleSeries.createPriceLine({ price: tData.sl, color: 'rgba(242,54,69,0.8)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'SL' }));
-          if (tData.tp) activePriceLines.push(candleSeries.createPriceLine({ price: tData.tp, color: 'rgba(8,153,129,0.8)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'TP' }));
-
-          const outcomeColor = tData.outcome === 'win' ? 'var(--bullish-color)' : (tData.outcome === 'loss' ? 'var(--bearish-color)' : '#fff');
-          tooltipEl.innerHTML = `
-            <div class="tooltip-row"><span class="tooltip-label">Trade:</span><span class="tooltip-val" style="color:${outcomeColor}">${tData.side} (${(tData.outcome || 'OPEN').toUpperCase()})</span></div>
-            <div class="tooltip-row"><span class="tooltip-label">Entry:</span><span class="tooltip-val">${priceFormatter.format(tData.entry_price)}</span></div>
-            <div class="tooltip-row"><span class="tooltip-label">SL / TP:</span><span class="tooltip-val">${tData.sl ? priceFormatter.format(tData.sl) : '--'} / ${tData.tp ? priceFormatter.format(tData.tp) : '--'}</span></div>
-            <div class="tooltip-row"><span class="tooltip-label">Exit:</span><span class="tooltip-val">${tData.exit_price ? priceFormatter.format(tData.exit_price) : '--'}</span></div>
-          `;
-          tooltipEl.style.left = (param.point.x + 15) + 'px';
-          tooltipEl.style.top = (param.point.y + 15) + 'px';
-          tooltipEl.classList.add('visible');
-        } else if (sourceChart === chartMain) {
-          clearActivePriceLines();
-          if (tooltipEl) tooltipEl.classList.remove('visible');
-        }
-
-        isSyncingCrosshair = false;
-      }
-
       chartMain.subscribeCrosshairMove(p => syncCrosshair(chartMain, p));
       chartRsi.subscribeCrosshairMove(p => syncCrosshair(chartRsi, p));
       chartAtr.subscribeCrosshairMove(p => syncCrosshair(chartAtr, p));
@@ -1371,7 +1461,99 @@
         lineWidth: 2,
       });
 
+      // Mouse tracking for inspector card to avoid crosshair conflicts
+      const inspectorCardEl = document.getElementById('signal-inspector-card');
+      if (inspectorCardEl) {
+        inspectorCardEl.addEventListener('mouseenter', () => { isMouseOverInspector = true; });
+        inspectorCardEl.addEventListener('mouseleave', () => { isMouseOverInspector = false; });
+      }
+
       window.addEventListener('resize', resizeAllCharts);
+    }
+
+    // --- Global Signal Inspector State & Functions ---
+    let currentInspectorTime = null;
+    let manuallyClosedSignalTime = null;
+    let isMouseOverInspector = false;
+    let aiFetchDebounceTimer = null;
+
+    function clearActivePriceLines() {
+      if (!candleSeries) return;
+      activePriceLines.forEach(line => { try { candleSeries.removePriceLine(line); } catch(e){} });
+      activePriceLines = [];
+    }
+
+    function closeSignalInspector(e) {
+      if (e) {
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+      }
+      manuallyClosedSignalTime = currentInspectorTime;
+      currentInspectorTime = null;
+      clearActivePriceLines();
+      const card = document.getElementById('signal-inspector-card');
+      if (card) {
+        card.style.display = 'none';
+      }
+    }
+    window.closeSignalInspector = closeSignalInspector;
+
+    // Delegated click listener for close button
+    document.addEventListener('click', (e) => {
+      if (e.target && (e.target.classList.contains('inspector-close-btn') || e.target.closest('.inspector-close-btn'))) {
+        closeSignalInspector(e);
+      }
+    });
+
+    function syncCrosshair(sourceChart, param) {
+      if (isSyncingCrosshair) return;
+      if (isMouseOverInspector) return;
+      isSyncingCrosshair = true;
+
+      if (!param || !param.time || !param.point || !lookupMap.has(param.time)) {
+        isCrosshairUserHovering = false;
+        showLatestHUD();
+        if (sourceChart !== chartMain && chartMain) chartMain.clearCrosshairPosition();
+        if (sourceChart !== chartRsi && chartRsi) chartRsi.clearCrosshairPosition();
+        if (sourceChart !== chartAtr && chartAtr) chartAtr.clearCrosshairPosition();
+        isSyncingCrosshair = false;
+        return;
+      }
+
+      isCrosshairUserHovering = true;
+      const t = param.time;
+      const data = lookupMap.get(t);
+      updateHUD(data);
+
+      if (sourceChart !== chartMain && data.candle && chartMain) chartMain.setCrosshairPosition(data.candle.close, t, candleSeries);
+      if (sourceChart !== chartRsi && chartRsi) chartRsi.setCrosshairPosition(data.rsi || 50, t, rsiSeries);
+      if (sourceChart !== chartAtr && chartAtr) chartAtr.setCrosshairPosition(data.atr || 0, t, atrSeries);
+
+      if (sourceChart === chartMain && tradeLookupMap.has(t)) {
+        // If the user manually closed the inspector for this exact candle, don't reopen it
+        if (manuallyClosedSignalTime === t) {
+          isSyncingCrosshair = false;
+          return;
+        }
+
+        // Reset manual close flag when hovering a different signal
+        manuallyClosedSignalTime = null;
+
+        const tData = tradeLookupMap.get(t);
+        if (currentInspectorTime !== t) {
+          clearActivePriceLines();
+          if (tData.entry_price) activePriceLines.push(candleSeries.createPriceLine({ price: tData.entry_price, color: 'rgba(255,255,255,0.7)', lineWidth: 1, title: 'ENTRY' }));
+          if (tData.sl) activePriceLines.push(candleSeries.createPriceLine({ price: tData.sl, color: 'rgba(242,54,69,0.85)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'SL' }));
+          if (tData.tp) activePriceLines.push(candleSeries.createPriceLine({ price: tData.tp, color: 'rgba(8,153,129,0.85)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'TP' }));
+
+          updateSignalInspector(t);
+        }
+      } else if (sourceChart === chartMain) {
+        // Reset manual close flag when moving away from the signal
+        manuallyClosedSignalTime = null;
+      }
+
+      isSyncingCrosshair = false;
     }
 
     function resizeAllCharts() {
@@ -1422,6 +1604,146 @@
       updateHUD(latest);
     }
 
+    function updateSignalInspector(timestampSec) {
+      const card = document.getElementById('signal-inspector-card');
+      if (!card || !tradeLookupMap.has(timestampSec)) return;
+
+      currentInspectorTime = timestampSec;
+      const tData = tradeLookupMap.get(timestampSec);
+
+      const isBuy = tData.side === 'BUY';
+      const sideColor = isBuy ? 'var(--bullish-color)' : 'var(--bearish-color)';
+      const sideIcon = isBuy ? '▲' : '▼';
+      card.className = `signal-inspector-card ${isBuy ? 'bullish' : 'bearish'}`;
+
+      // Calculate R:R or distance
+      let rrStr = '--';
+      if (tData.entry_price && tData.sl && tData.tp) {
+        const slDist = Math.abs(tData.entry_price - tData.sl);
+        const tpDist = Math.abs(tData.entry_price - tData.tp);
+        if (slDist > 0) {
+          rrStr = `1:${(tpDist / slDist).toFixed(2)}R`;
+        }
+      }
+
+      let aiSectionHtml = '';
+      if (tData.aiLoading) {
+        const aiMod = runtimeStatus?.ai_model || 'Gemini';
+        aiSectionHtml = `
+          <div class="inspector-ai-section">
+            <div class="ai-loading-box">
+              <div class="mini-spinner"></div>
+              <span>Analyzing market with ${aiMod}...</span>
+            </div>
+          </div>
+        `;
+      } else if (tData.ai) {
+        const aiAction = (tData.ai.action || 'skip').toUpperCase();
+        const isAiBuy = aiAction === 'BUY';
+        const isAiSell = aiAction === 'SELL';
+        const badgeClass = isAiBuy ? 'buy' : (isAiSell ? 'sell' : 'skip');
+        const conf = tData.ai.confidence !== undefined ? `${(tData.ai.confidence * 100).toFixed(0)}%` : '--';
+
+        let aiBadgeText = `🤖 AI: ${aiAction}`;
+        if (isAiBuy || isAiSell) {
+          aiBadgeText = `🤖 AI: ${aiAction} (${conf})`;
+        } else {
+          aiBadgeText = `🤖 AI: SKIP (Bẫy giá / Rủi ro)`;
+        }
+
+        aiSectionHtml = `
+          <div class="inspector-ai-section">
+            <div class="ai-decision-row">
+              <span class="ai-badge ${badgeClass}">${aiBadgeText}</span>
+              <button class="btn-reconsult" onclick="requestAiAdvice(${timestampSec})" title="Re-query AI">
+                <span>🔄</span> Re-analyze
+              </button>
+            </div>
+            <div class="ai-reason-card">
+              ${tData.ai.reason || 'AI evaluation complete.'}
+            </div>
+          </div>
+        `;
+      } else {
+        aiSectionHtml = `
+          <div class="inspector-ai-section">
+            <button class="btn-reconsult" style="width:100%; justify-content:center; padding:6px 10px; font-size:0.72rem; color:#fff; background:linear-gradient(135deg,#2962ff,#7c4dff);" onclick="requestAiAdvice(${timestampSec})">
+              <span>✨</span> Ask AI (Gemini Advice)
+            </button>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="inspector-header">
+          <div class="inspector-title" style="color: ${sideColor}">
+            <span>${sideIcon}</span> ${tData.side} Setup
+          </div>
+          <button class="inspector-close-btn" onclick="closeSignalInspector(event)" title="Close Inspector">×</button>
+        </div>
+        <div style="font-size:0.68rem; color:var(--text-muted); margin-bottom:6px;">
+          Time: ${formatTime(timestampSec)}
+        </div>
+        <div class="inspector-grid">
+          <div class="inspector-field"><span class="inspector-label">ENTRY:</span><span class="inspector-value">${priceFormatter.format(tData.entry_price)}</span></div>
+          <div class="inspector-field"><span class="inspector-label">R:R:</span><span class="inspector-value" style="color:var(--gold-accent);">${rrStr}</span></div>
+          <div class="inspector-field"><span class="inspector-label">STOP LOSS:</span><span class="inspector-value" style="color:var(--bearish-color);">${tData.sl ? priceFormatter.format(tData.sl) : '--'}</span></div>
+          <div class="inspector-field"><span class="inspector-label">TAKE PROFIT:</span><span class="inspector-value" style="color:var(--bullish-color);">${tData.tp ? priceFormatter.format(tData.tp) : '--'}</span></div>
+        </div>
+        ${aiSectionHtml}
+      `;
+
+      card.style.display = 'block';
+
+      // Auto-trigger AI advice if not already loaded or loading
+      if (!tData.ai && !tData.aiLoading) {
+        if (aiFetchDebounceTimer) clearTimeout(aiFetchDebounceTimer);
+        aiFetchDebounceTimer = setTimeout(() => {
+          requestAiAdvice(timestampSec);
+        }, 200);
+      }
+    }
+    window.updateSignalInspector = updateSignalInspector;
+
+    async function requestAiAdvice(timestampSec) {
+      if (!tradeLookupMap.has(timestampSec)) return;
+      const tData = tradeLookupMap.get(timestampSec);
+      tData.aiLoading = true;
+      updateSignalInspector(timestampSec);
+
+      try {
+        const symbol = runtimeConfig.symbol || 'XAU_USD';
+        const timeframe = runtimeConfig.timeframe || 'M5';
+        const res = await fetch(`/api/ai-advice?time=${timestampSec}&symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.decision) {
+            tData.ai = data.decision;
+            // Also update tradeData list
+            const matchTrade = tradeData.find(t => {
+              const s = typeof t.time === 'number'
+                ? (t.time > 1e11 ? Math.floor(t.time / 1000) : t.time)
+                : Math.floor(new Date(t.time).getTime() / 1000);
+              return s === timestampSec;
+            });
+            if (matchTrade) {
+              matchTrade.ai = data.decision;
+            }
+          } else {
+            tData.ai = { action: 'error', reason: data.error || 'AI analysis failed.' };
+          }
+        } else {
+          tData.ai = { action: 'error', reason: 'Failed to contact AI endpoint.' };
+        }
+      } catch (err) {
+        tData.ai = { action: 'error', reason: err.message };
+      } finally {
+        tData.aiLoading = false;
+        updateSignalInspector(timestampSec);
+      }
+    }
+    window.requestAiAdvice = requestAiAdvice;
+
     function renderTradeMarkers() {
       if (!tradeData || tradeData.length === 0 || !candleSeries) return;
       const markers = [];
@@ -1447,26 +1769,36 @@
         }
 
         if (!include || !details) return;
-        const timeSec = new Date(trade.time).getTime() / 1000;
+
+        let timeSec = null;
+        if (typeof trade.time === 'number') {
+          timeSec = trade.time > 1e11 ? Math.floor(trade.time / 1000) : trade.time;
+        } else if (typeof trade.time === 'string') {
+          const parsed = new Date(trade.time).getTime();
+          timeSec = isNaN(parsed) ? (Number(trade.time) || null) : Math.floor(parsed / 1000);
+        }
+        if (!timeSec) return;
 
         tradeLookupMap.set(timeSec, {
+          id: trade.id,
+          time: timeSec,
           side: trade.side,
           entry_price: trade.entry_price,
           sl: details.sl,
           tp: details.tp,
           outcome: outcome,
-          exit_price: details.exit_price
+          exit_price: details.exit_price,
+          ai: trade.ai || null
         });
 
-        let color = '#868993';
-        if (outcome === 'win') color = '#089981';
-        else if (outcome === 'loss') color = '#f23645';
+        const isBuy = trade.side === 'BUY';
+        const color = isBuy ? '#089981' : '#f23645';
 
         markers.push({
           time: timeSec,
-          position: trade.side === 'BUY' ? 'belowBar' : 'aboveBar',
+          position: isBuy ? 'belowBar' : 'aboveBar',
           color: color,
-          shape: trade.side === 'BUY' ? 'arrowUp' : 'arrowDown',
+          shape: isBuy ? 'arrowUp' : 'arrowDown',
           text: trade.side
         });
       });
@@ -1941,15 +2273,33 @@
           });
         }
 
-        // 5. Fetch Trades
+        // 5. Fetch Live Rule Signals or Backtest Trades
+        // 5. Fetch Live Rule Signals across full history
+        let loadedSignals = false;
         try {
-          const tradesRes = await fetch('/api/trades');
-          if (tradesRes.ok) {
-            const tradesJson = await tradesRes.json();
-            tradeData = tradesJson.signals || [];
-            renderTradeMarkers();
+          const signalsRes = await fetch('/api/signals');
+          if (signalsRes.ok) {
+            const signalsJson = await signalsRes.json();
+            if (signalsJson.ok && signalsJson.signals && signalsJson.signals.length > 0) {
+              tradeData = signalsJson.signals;
+              renderTradeMarkers();
+              loadedSignals = true;
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Live signals fetch failed:', e);
+        }
+
+        if (!loadedSignals) {
+          try {
+            const tradesRes = await fetch('/api/trades');
+            if (tradesRes.ok) {
+              const tradesJson = await tradesRes.json();
+              tradeData = tradesJson.signals || [];
+              renderTradeMarkers();
+            }
+          } catch (e) {}
+        }
 
         // Hide Loader
         loader.style.display = 'none';
@@ -1986,14 +2336,18 @@
       if (countBadge) countBadge.textContent = '⏳ Loading older candles...';
 
       try {
-        const res = await fetch(`/api/candles?count=2000&before_time=${oldestTime}`);
-        if (!res.ok) {
+        const [candlesRes, signalsRes] = await Promise.all([
+          fetch(`/api/candles?count=2000&before_time=${oldestTime}`),
+          fetch(`/api/signals?count=2000&before_time=${oldestTime}`)
+        ]);
+
+        if (!candlesRes.ok) {
           hasMoreHistory = false;
           if (countBadge) countBadge.textContent = prevCountText;
           return;
         }
 
-        const json = await res.json();
+        const json = await candlesRes.json();
         const olderCandles = json.candles || [];
 
         if (olderCandles.length === 0) {
@@ -2063,6 +2417,33 @@
           chartRsi.timeScale().setVisibleLogicalRange(newRange);
           chartAtr.timeScale().setVisibleLogicalRange(newRange);
           isSyncingRange = false;
+        }
+
+        // Merge older signals into tradeData
+        if (signalsRes && signalsRes.ok) {
+          try {
+            const sigJson = await signalsRes.json();
+            if (sigJson.ok && sigJson.signals && sigJson.signals.length > 0) {
+              const existingSigTimes = new Set(tradeData.map(t => {
+                return typeof t.time === 'number'
+                  ? (t.time > 1e11 ? Math.floor(t.time / 1000) : t.time)
+                  : Math.floor(new Date(t.time).getTime() / 1000);
+              }));
+
+              const freshSigs = sigJson.signals.filter(s => {
+                const st = typeof s.time === 'number'
+                  ? (s.time > 1e11 ? Math.floor(s.time / 1000) : s.time)
+                  : Math.floor(new Date(s.time).getTime() / 1000);
+                return !existingSigTimes.has(st);
+              });
+
+              if (freshSigs.length > 0) {
+                tradeData = [...freshSigs, ...tradeData];
+              }
+            }
+          } catch (e) {
+            console.warn('Error merging older signals:', e);
+          }
         }
 
         renderTradeMarkers();

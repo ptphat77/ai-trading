@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const config = require('../../src/config');
+const BacktestEngine = require('../../src/backtest/BacktestEngine');
+const { buildContext } = require('../../src/bot/SignalBuilder');
+const AIAgentFactory = require('../../src/ai/AIAgentFactory');
 
 const PORT = process.env.CHART_PORT || config.CHART_PORT || 3400;
 const BRIDGE_URL = process.env.MT5_BRIDGE_URL || 'http://127.0.0.1:8000';
@@ -56,7 +59,7 @@ function readCsvFile(filePath) {
 }
 
 // Parse CSV text into candle objects
-function parseCsvToCandles(csvText, maxCount = 5000) {
+function parseCsvToCandles(csvText, maxCount = 5000, beforeTime = null) {
   const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) return [];
 
@@ -143,6 +146,52 @@ function parseCsvToCandles(csvText, maxCount = 5000) {
     return candles.slice(candles.length - maxCount);
   }
   return candles;
+}
+
+// Unified helper to load candles from MT5 Bridge or CSV fallback
+async function loadCandlesHelper(symbol = 'XAU_USD', timeframe = 'M5', count = 5000, beforeTime = null) {
+  // 1. Try bridge
+  const bridgeCount = Math.min(count, 5000);
+  let bridgeEndpoint = `/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=${bridgeCount}`;
+  if (beforeTime) bridgeEndpoint += `&before_time=${beforeTime}`;
+
+  const bridgeData = await fetchBridgeJson(bridgeEndpoint, 3500);
+  if (bridgeData && Array.isArray(bridgeData) && bridgeData.length > 0) {
+    return bridgeData;
+  }
+
+  // 2. Try CSV fallback
+  const resolvedCsvPath = getResolvedCsvPath();
+  if (fs.existsSync(resolvedCsvPath)) {
+    const csvText = readCsvFile(resolvedCsvPath);
+    return parseCsvToCandles(csvText, count, beforeTime);
+  }
+
+  return [];
+}
+
+// Helper to load combined full history: Live MT5 candles (up to 5000) + older CSV candles
+async function loadAllHistoryAndLiveCandles(symbol = 'XAU_USD', timeframe = 'M5') {
+  // 1. Try bridge for latest live candles (up to 5000)
+  const bridgeEndpoint = `/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=5000`;
+  const bridgeData = await fetchBridgeJson(bridgeEndpoint, 3500);
+
+  const resolvedCsvPath = getResolvedCsvPath();
+  let csvCandles = [];
+  if (fs.existsSync(resolvedCsvPath)) {
+    const csvText = readCsvFile(resolvedCsvPath);
+    csvCandles = parseCsvToCandles(csvText, 100000);
+  }
+
+  if (bridgeData && Array.isArray(bridgeData) && bridgeData.length > 0) {
+    const oldestBridgeTime = bridgeData[0].time;
+    // Filter CSV candles that are older than oldest bridge candle
+    const olderCsv = csvCandles.filter(c => c.time < oldestBridgeTime);
+    const combined = [...olderCsv, ...bridgeData].sort((a, b) => a.time - b.time);
+    return combined;
+  }
+
+  return csvCandles;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -537,9 +586,190 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Cache for full history signals
+  let cachedSignals = null;
+  let cachedSignalsTime = 0;
+
+  // Route: Calculate Rule-Based Signals across history
+  if (url.pathname === '/api/signals') {
+    const symbol = url.searchParams.get('symbol') || config.SYMBOL || 'XAU_USD';
+    const timeframe = url.searchParams.get('timeframe') || config.TIMEFRAME || 'M5';
+    const forceRefresh = url.searchParams.get('refresh') === '1';
+
+    const now = Date.now();
+    if (!forceRefresh && cachedSignals && (now - cachedSignalsTime < 60000)) {
+      sendJson(200, {
+        ok: true,
+        count: cachedSignals.length,
+        signals: cachedSignals
+      });
+      return;
+    }
+
+    try {
+      // Load all available history + live MT5 candles so H1 EMA200 warmup is fully satisfied
+      const rawCandles = await loadAllHistoryAndLiveCandles(symbol, timeframe);
+      if (!rawCandles || rawCandles.length < 50) {
+        sendJson(200, { ok: true, count: 0, signals: [] });
+        return;
+      }
+
+      // Format candle timestamps to ISO format for BacktestEngine
+      const formattedCandles = rawCandles.map(c => ({
+        ...c,
+        time: typeof c.time === 'number' ? new Date(c.time * 1000).toISOString() : c.time
+      }));
+
+      const engine = new BacktestEngine({ candles: formattedCandles });
+      const result = await engine.runRuleBased();
+
+      // Transform result trades into signals array
+      const signals = (result.trades || []).map((t, idx) => {
+        const timeSec = typeof t.entryTime === 'number'
+          ? (t.entryTime > 1e11 ? Math.floor(t.entryTime / 1000) : t.entryTime)
+          : Math.floor(new Date(t.entryTime).getTime() / 1000);
+
+        return {
+          id: idx + 1,
+          time: isNaN(timeSec) ? t.entryTime : timeSec,
+          time_str: typeof t.entryTime === 'string' ? t.entryTime : new Date(timeSec * 1000).toISOString(),
+          side: (t.side || 'BUY').toUpperCase(),
+          entry_price: t.entryPrice,
+          rule_based: {
+            action: t.side,
+            reason: t.exitReason ? `Rule exit: ${t.exitReason}` : 'Rule-based setup',
+            sl: t.sl,
+            tp: t.tp,
+            outcome: t.outcome,
+            exit_price: t.exitPrice,
+            exit_time: t.exitTime
+          },
+          ai: null
+        };
+      });
+
+      cachedSignals = signals;
+      cachedSignalsTime = now;
+
+      sendJson(200, {
+        ok: true,
+        count: signals.length,
+        signals
+      });
+    } catch (err) {
+      sendJson(500, { ok: false, error: `Failed to calculate rule signals: ${err.message}` });
+    }
+    return;
+  }
+
+  // Route: On-demand AI Advice Consultation for a specific signal/candle
+  if (url.pathname === '/api/ai-advice') {
+    const symbol = url.searchParams.get('symbol') || config.SYMBOL || 'XAU_USD';
+    const timeframe = url.searchParams.get('timeframe') || config.TIMEFRAME || 'M5';
+    const targetTimeParam = url.searchParams.get('time');
+
+    if (!targetTimeParam) {
+      sendJson(400, { ok: false, error: 'Query parameter "time" is required.' });
+      return;
+    }
+
+    try {
+      // Parse target timestamp
+      let targetSec = null;
+      if (!isNaN(Number(targetTimeParam))) {
+        const num = Number(targetTimeParam);
+        targetSec = num > 1e11 ? Math.floor(num / 1000) : num;
+      } else {
+        targetSec = Math.floor(new Date(targetTimeParam).getTime() / 1000);
+      }
+
+      const rawCandles = await loadCandlesHelper(symbol, timeframe, 10000);
+      if (!rawCandles || rawCandles.length < 50) {
+        sendJson(400, { ok: false, error: 'Insufficient candle data to analyze.' });
+        return;
+      }
+
+      // Convert all raw candle times to seconds for comparison
+      const candlesWithSec = rawCandles.map(c => {
+        const s = typeof c.time === 'number'
+          ? (c.time > 1e11 ? Math.floor(c.time / 1000) : c.time)
+          : Math.floor(new Date(c.time).getTime() / 1000);
+        return {
+          ...c,
+          _sec: s,
+          time: new Date(s * 1000).toISOString()
+        };
+      });
+
+      // Find index of target candle
+      let targetIdx = candlesWithSec.findIndex(c => c._sec === targetSec);
+      if (targetIdx === -1) {
+        // Find closest candle before or equal to targetSec
+        for (let i = candlesWithSec.length - 1; i >= 0; i--) {
+          if (candlesWithSec[i]._sec <= targetSec) {
+            targetIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (targetIdx < 25) {
+        sendJson(400, { ok: false, error: 'Not enough historical candles preceding the selected signal time.' });
+        return;
+      }
+
+      // Slice window of candles leading up to this candle (150 candles)
+      const windowCandles = candlesWithSec.slice(Math.max(0, targetIdx - 150 + 1), targetIdx + 1);
+
+      // Build context for AI
+      const context = buildContext(windowCandles, config);
+      if (!context) {
+        sendJson(500, { ok: false, error: 'Failed to build strategy context for AI.' });
+        return;
+      }
+
+      // Query AI Agent
+      const aiAgent = AIAgentFactory.createAgent();
+      const decision = await aiAgent.getDecision(context);
+
+      sendJson(200, {
+        ok: true,
+        symbol,
+        timeframe,
+        targetTime: targetTimeParam,
+        targetCandle: candlesWithSec[targetIdx],
+        context: {
+          currentPrice: context.currentPrice,
+          indicators: context.indicators
+        },
+        decision: {
+          action: decision.action,
+          confidence: decision.confidence,
+          accepted: (decision.action === 'buy' || decision.action === 'sell') && decision.confidence >= (config.MIN_CONFIDENCE || 0.7),
+          reason: decision.reason || 'AI analysis completed.',
+          sl_atr_multiplier: decision.sl_atr_multiplier,
+          tp_atr_multiplier: decision.tp_atr_multiplier
+        }
+      });
+    } catch (err) {
+      sendJson(500, { ok: false, error: `AI analysis error: ${err.message}` });
+    }
+    return;
+  }
+
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('404 Not Found');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Error: Port ${PORT} is already in use by another process.`);
+    console.error(`💡 Tip: Run 'taskkill /F /PID <PID>' or kill previous node instance.\n`);
+    process.exit(1);
+  } else {
+    console.error('Server error:', err);
+  }
 });
 
 server.listen(PORT, () => {

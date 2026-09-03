@@ -27,6 +27,7 @@ class BacktestEngine {
    * @param {GeminiAgent} [options.geminiAgent] - Backward compatibility alias for aiAgent
    */
   constructor(options = {}) {
+    this.candles = options.candles || null;
     this.dataClient = options.dataClient || new CsvDataClient();
     this.aiAgent = options.aiAgent || options.geminiAgent || AIAgentFactory.createAgent();
     this.geminiAgent = this.aiAgent; // Backward compatibility alias
@@ -70,7 +71,7 @@ class BacktestEngine {
     const maxAiCalls = config.MAX_AI_CALLS || 0;
     const maxAiAccepted = config.MAX_AI_ACCEPTED || 0;
 
-    const allCandles = await this.dataClient.getCandles(Number.MAX_SAFE_INTEGER);
+    const allCandles = this.candles || await this.dataClient.getCandles(Number.MAX_SAFE_INTEGER);
     let candles = allCandles;
     if (candles && config.MAX_CANDLES_TO_PROCESS && config.MAX_CANDLES_TO_PROCESS > 0) {
       candles = candles.slice(0, config.MAX_CANDLES_TO_PROCESS);
