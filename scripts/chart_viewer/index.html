@@ -159,6 +159,58 @@
       100% { opacity: 1; transform: scale(1); }
     }
 
+    .live-ticker-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      background: var(--bg-primary);
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .ticker-col {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .ticker-lbl {
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 600;
+    }
+
+    .ticker-val {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .ticker-val.gold {
+      color: var(--gold-accent);
+    }
+
+    .ticker-col.countdown {
+      border-left: 1px solid var(--border-color);
+      padding-left: 10px;
+    }
+
+    .position-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 4px;
+      background: rgba(41, 98, 255, 0.15);
+      color: #82b1ff;
+      border: 1px solid rgba(41, 98, 255, 0.4);
+    }
+
     .indicators-legend {
       display: flex;
       align-items: center;
@@ -225,6 +277,18 @@
 
     .btn.primary:hover {
       background: var(--accent-hover);
+    }
+
+    .btn.live-active {
+      background: rgba(8, 153, 129, 0.2);
+      color: #26a69a;
+      border-color: rgba(8, 153, 129, 0.5);
+    }
+
+    .btn.live-paused {
+      background: rgba(245, 166, 35, 0.15);
+      color: #ffb74d;
+      border-color: rgba(245, 166, 35, 0.4);
     }
 
     .select-dropdown {
@@ -685,6 +749,17 @@
         <span id="source-text">Checking Source...</span>
       </div>
 
+      <!-- Live Ticker & Bar Countdown -->
+      <div class="live-ticker-box" id="live-ticker-box">
+        <div class="ticker-col"><span class="ticker-lbl">BID</span><span class="ticker-val" id="ticker-bid">--</span></div>
+        <div class="ticker-col"><span class="ticker-lbl">ASK</span><span class="ticker-val" id="ticker-ask">--</span></div>
+        <div class="ticker-col"><span class="ticker-lbl">SPREAD</span><span class="ticker-val" id="ticker-spread">--</span></div>
+        <div class="ticker-col countdown"><span class="ticker-lbl">BAR</span><span class="ticker-val gold" id="ticker-countdown">--:--</span></div>
+      </div>
+
+      <!-- Live Open Position Badge -->
+      <div class="position-badge" id="position-badge" style="display:none;"></div>
+
       <div class="indicators-legend" id="chart-legend-box">
         <div class="legend-item"><span class="dot ema-fast"></span>EMA 9</div>
         <div class="legend-item"><span class="dot ema-slow"></span>EMA 21</div>
@@ -696,6 +771,10 @@
     </div>
 
     <div class="header-right">
+      <button class="btn live-active" id="btn-auto-follow" onclick="toggleAutoFollow()" title="Auto-scroll with live incoming bars">
+        <span id="auto-follow-icon">🟢</span> <span id="auto-follow-text">Live Follow</span>
+      </button>
+
       <select id="candle-count-select" class="select-dropdown" onchange="onCandleCountChange(event)" title="Number of historical bars to load">
         <option value="5000" selected>5,000 Bars</option>
         <option value="10000">10,000 Bars</option>
@@ -921,6 +1000,12 @@
     let runtimeStatus = null;
     let isLoadingHistory = false;
     let hasMoreHistory = true;
+    let autoFollowLive = true;
+    let isCrosshairUserHovering = false;
+
+    let activeEventSource = null;
+    let livePollTimer = null;
+    let countdownInterval = null;
 
     let chartMain, chartRsi, chartAtr, equityChart;
     let candleSeries, emaFastSeries, emaSlowSeries, rsiSeries, atrSeries, equitySeries;
@@ -935,6 +1020,18 @@
       rsiOversold: 35,
       rsiOverbought: 65,
       atrPeriod: 14
+    };
+
+    const TF_SECONDS_MAP = {
+      'M1': 60,
+      'M2': 120,
+      'M3': 180,
+      'M5': 300,
+      'M15': 900,
+      'M30': 1800,
+      'H1': 3600,
+      'H4': 14400,
+      'D1': 86400
     };
 
     const PRICE_SCALE_WIDTH = 85;
@@ -952,7 +1049,8 @@
       const D = String(d.getUTCDate()).padStart(2, '0');
       const h = String(d.getUTCHours()).padStart(2, '0');
       const m = String(d.getUTCMinutes()).padStart(2, '0');
-      return `${Y}-${M}-${D} ${h}:${m} UTC`;
+      const s = String(d.getUTCSeconds()).padStart(2, '0');
+      return `${Y}-${M}-${D} ${h}:${m}:${s} UTC`;
     }
 
     // --- View Switching ---
@@ -966,12 +1064,14 @@
         document.getElementById('nav-btn-chart').classList.add('active');
         document.getElementById('chart-legend-box').style.display = 'flex';
         document.getElementById('btn-fit-chart').style.display = 'inline-flex';
+        document.getElementById('btn-auto-follow').style.display = 'inline-flex';
         setTimeout(resizeAllCharts, 50);
       } else {
         document.getElementById('view-dashboard').classList.add('active');
         document.getElementById('nav-btn-dashboard').classList.add('active');
         document.getElementById('chart-legend-box').style.display = 'none';
         document.getElementById('btn-fit-chart').style.display = 'none';
+        document.getElementById('btn-auto-follow').style.display = 'none';
         renderDashboard();
         setTimeout(resizeEquityChart, 50);
       }
@@ -1050,6 +1150,58 @@
       return results;
     }
 
+    // --- Fast Incremental Indicators for Live Streaming ---
+    function computeIncrementalIndicators(candle, isNewBar) {
+      const fastP = runtimeConfig.maFast || 9;
+      const slowP = runtimeConfig.maSlow || 21;
+      const rsiP = runtimeConfig.rsiPeriod || 9;
+      const atrP = runtimeConfig.atrPeriod || 14;
+
+      let curEmaFast, curEmaSlow, curRsi, curAtr;
+
+      if (candleData.length >= 2) {
+        if (!isNewBar) {
+          // Updating forming candle
+          const prevEmaFast = emaFastData.length >= 2 ? emaFastData[emaFastData.length - 2].value : candle.close;
+          curEmaFast = prevEmaFast !== undefined ? ((candle.close - prevEmaFast) * (2 / (fastP + 1)) + prevEmaFast) : candle.close;
+
+          const prevEmaSlow = emaSlowData.length >= 2 ? emaSlowData[emaSlowData.length - 2].value : candle.close;
+          curEmaSlow = prevEmaSlow !== undefined ? ((candle.close - prevEmaSlow) * (2 / (slowP + 1)) + prevEmaSlow) : candle.close;
+
+          const rsiSlice = calculateRSI(candleData.slice(-50), rsiP);
+          curRsi = rsiSlice.length > 0 ? rsiSlice[rsiSlice.length - 1].value : undefined;
+
+          const atrSlice = calculateATR(candleData.slice(-60), atrP);
+          curAtr = atrSlice.length > 0 ? atrSlice[atrSlice.length - 1].value : undefined;
+
+          if (emaFastData.length > 0) emaFastData[emaFastData.length - 1] = { time: candle.time, value: curEmaFast };
+          if (emaSlowData.length > 0) emaSlowData[emaSlowData.length - 1] = { time: candle.time, value: curEmaSlow };
+          if (rsiData.length > 0) rsiData[rsiData.length - 1] = { time: candle.time, value: curRsi };
+          if (atrData.length > 0) atrData[atrData.length - 1] = { time: candle.time, value: curAtr };
+        } else {
+          // Appending new bar
+          const prevEmaFast = emaFastData.length > 0 ? emaFastData[emaFastData.length - 1].value : candle.close;
+          curEmaFast = prevEmaFast !== undefined ? ((candle.close - prevEmaFast) * (2 / (fastP + 1)) + prevEmaFast) : candle.close;
+
+          const prevEmaSlow = emaSlowData.length > 0 ? emaSlowData[emaSlowData.length - 1].value : candle.close;
+          curEmaSlow = prevEmaSlow !== undefined ? ((candle.close - prevEmaSlow) * (2 / (slowP + 1)) + prevEmaSlow) : candle.close;
+
+          const rsiSlice = calculateRSI(candleData.slice(-50), rsiP);
+          curRsi = rsiSlice.length > 0 ? rsiSlice[rsiSlice.length - 1].value : undefined;
+
+          const atrSlice = calculateATR(candleData.slice(-60), atrP);
+          curAtr = atrSlice.length > 0 ? atrSlice[atrSlice.length - 1].value : undefined;
+
+          emaFastData.push({ time: candle.time, value: curEmaFast });
+          emaSlowData.push({ time: candle.time, value: curEmaSlow });
+          rsiData.push({ time: candle.time, value: curRsi });
+          atrData.push({ time: candle.time, value: curAtr });
+        }
+      }
+
+      return { emaFast: curEmaFast, emaSlow: curEmaSlow, rsi: curRsi, atr: curAtr };
+    }
+
     // --- Chart Setup ---
     const chartBaseOptions = {
       layout: {
@@ -1121,7 +1273,7 @@
         color: '#ffb74d', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'ATR 14'
       });
 
-      // Synchronize range & Infinite Scroll (Lazy load older candles when scrolled near left edge)
+      // Synchronize range & Infinite Scroll & Auto-follow Pause Detection
       const charts = [chartMain, chartRsi, chartAtr];
       charts.forEach((c, idx) => {
         c.timeScale().subscribeVisibleLogicalRangeChange(range => {
@@ -1129,6 +1281,11 @@
           isSyncingRange = true;
           charts.forEach((oc, oidx) => { if (idx !== oidx) oc.timeScale().setVisibleLogicalRange(range); });
           isSyncingRange = false;
+
+          // Auto-pause follow live if user scrolls back into history
+          if (autoFollowLive && candleData.length > 0 && range.to < candleData.length - 8) {
+            setAutoFollow(false);
+          }
 
           // Auto-load older history when reaching left boundary
           if (range.from < 25 && !isLoadingHistory && hasMoreHistory && candleData.length > 0) {
@@ -1149,6 +1306,7 @@
         const tooltipEl = document.getElementById('trade-tooltip');
 
         if (!param || !param.time || !param.point || !lookupMap.has(param.time)) {
+          isCrosshairUserHovering = false;
           showLatestHUD();
           if (sourceChart !== chartMain) chartMain.clearCrosshairPosition();
           if (sourceChart !== chartRsi) chartRsi.clearCrosshairPosition();
@@ -1161,6 +1319,7 @@
           return;
         }
 
+        isCrosshairUserHovering = true;
         const t = param.time;
         const data = lookupMap.get(t);
         updateHUD(data);
@@ -1486,7 +1645,203 @@
       }
     }
 
-    // --- Data Fetching ---
+    // --- Real-time Streaming & Live Updates ---
+    function setAutoFollow(isActive) {
+      autoFollowLive = isActive;
+      const btn = document.getElementById('btn-auto-follow');
+      const icon = document.getElementById('auto-follow-icon');
+      const text = document.getElementById('auto-follow-text');
+      if (btn && icon && text) {
+        if (autoFollowLive) {
+          btn.className = 'btn live-active';
+          icon.textContent = '🟢';
+          text.textContent = 'Live Follow';
+        } else {
+          btn.className = 'btn live-paused';
+          icon.textContent = '⏸';
+          text.textContent = 'Follow Live';
+        }
+      }
+    }
+
+    function toggleAutoFollow() {
+      setAutoFollow(!autoFollowLive);
+      if (autoFollowLive && candleData.length > 0 && chartMain) {
+        const stepSec = candleData.length > 1 ? (candleData[1].time - candleData[0].time) : 300;
+        const startIdx = Math.max(0, candleData.length - 150);
+        chartMain.timeScale().setVisibleRange({
+          from: candleData[startIdx].time,
+          to: candleData[candleData.length - 1].time + stepSec * 5
+        });
+      }
+    }
+
+    function onLiveUpdate(data) {
+      if (!data) return;
+
+      // 1. Update Live Tick / Ticker in Header
+      if (data.tick) {
+        const bid = data.tick.bid;
+        const ask = data.tick.ask;
+        const spread = (ask - bid).toFixed(2);
+        const bidEl = document.getElementById('ticker-bid');
+        const askEl = document.getElementById('ticker-ask');
+        const spreadEl = document.getElementById('ticker-spread');
+        if (bidEl) bidEl.textContent = priceFormatter.format(bid);
+        if (askEl) askEl.textContent = priceFormatter.format(ask);
+        if (spreadEl) spreadEl.textContent = spread;
+      }
+
+      // 2. Update Live Open Positions
+      const posEl = document.getElementById('position-badge');
+      if (posEl) {
+        if (data.positions && data.positions.length > 0) {
+          const totalProfit = data.positions.reduce((acc, p) => acc + (p.profit || 0), 0);
+          const color = totalProfit >= 0 ? 'var(--bullish-color)' : 'var(--bearish-color)';
+          posEl.style.display = 'inline-flex';
+          posEl.innerHTML = `⚡ ${data.positions.length} Open (<span style="color:${color}">${totalProfit >= 0 ? '+' : ''}$${totalProfit.toFixed(2)}</span>)`;
+        } else {
+          posEl.style.display = 'none';
+        }
+      }
+
+      // 3. Update Live Source Badge
+      const sourceBadge = document.getElementById('data-source-badge');
+      const sourceText = document.getElementById('source-text');
+      if (sourceBadge && sourceText) {
+        if (data.source === 'live') {
+          sourceBadge.className = 'source-badge live';
+          sourceText.textContent = 'LIVE (MT5)';
+        } else {
+          sourceBadge.className = 'source-badge csv';
+          sourceText.textContent = 'CSV Fallback';
+        }
+      }
+
+      // 4. Update Forming / New Candle on Lightweight Charts
+      if (!data.latestCandle || candleData.length === 0 || !candleSeries) return;
+
+      const incoming = data.latestCandle;
+      const last = candleData[candleData.length - 1];
+
+      if (incoming.time === last.time) {
+        // In-place update of current forming candle
+        candleData[candleData.length - 1] = incoming;
+        const ind = computeIncrementalIndicators(incoming, false);
+
+        candleSeries.update(incoming);
+        if (ind.emaFast !== undefined) emaFastSeries.update({ time: incoming.time, value: ind.emaFast });
+        if (ind.emaSlow !== undefined) emaSlowSeries.update({ time: incoming.time, value: ind.emaSlow });
+        if (ind.rsi !== undefined) rsiSeries.update({ time: incoming.time, value: ind.rsi });
+        if (ind.atr !== undefined) atrSeries.update({ time: incoming.time, value: ind.atr });
+
+        lookupMap.set(incoming.time, { candle: incoming, ...ind });
+        if (!isCrosshairUserHovering) showLatestHUD();
+
+      } else if (incoming.time > last.time) {
+        // A new candle has officially started!
+        candleData.push(incoming);
+        const ind = computeIncrementalIndicators(incoming, true);
+
+        candleSeries.update(incoming);
+        if (ind.emaFast !== undefined) emaFastSeries.update({ time: incoming.time, value: ind.emaFast });
+        if (ind.emaSlow !== undefined) emaSlowSeries.update({ time: incoming.time, value: ind.emaSlow });
+        if (ind.rsi !== undefined) rsiSeries.update({ time: incoming.time, value: ind.rsi });
+        if (ind.atr !== undefined) atrSeries.update({ time: incoming.time, value: ind.atr });
+
+        lookupMap.set(incoming.time, { candle: incoming, ...ind });
+        document.getElementById('candles-count').textContent = `Total: ${candleData.length.toLocaleString()} candles`;
+
+        if (autoFollowLive && chartMain) {
+          const range = chartMain.timeScale().getVisibleLogicalRange();
+          if (range) {
+            isSyncingRange = true;
+            chartMain.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
+            chartRsi.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
+            chartAtr.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
+            isSyncingRange = false;
+          }
+        }
+
+        if (!isCrosshairUserHovering) showLatestHUD();
+      }
+    }
+
+    function startCountdownTimer() {
+      if (countdownInterval) clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        if (!candleData || candleData.length === 0) return;
+        const lastCandle = candleData[candleData.length - 1];
+        const tf = (runtimeConfig.timeframe || 'M5').toUpperCase();
+        const tfSec = TF_SECONDS_MAP[tf] || 300;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const barEndSec = lastCandle.time + tfSec;
+        const remainingSec = Math.max(0, barEndSec - nowSec);
+
+        const m = Math.floor(remainingSec / 60);
+        const s = remainingSec % 60;
+        const countStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+        const cdEl = document.getElementById('ticker-countdown');
+        if (cdEl) cdEl.textContent = countStr;
+      }, 1000);
+    }
+
+    function startRealtimeStream() {
+      if (activeEventSource) {
+        activeEventSource.close();
+        activeEventSource = null;
+      }
+      if (livePollTimer) {
+        clearInterval(livePollTimer);
+        livePollTimer = null;
+      }
+
+      const symbol = runtimeConfig.symbol || 'XAU_USD';
+      const timeframe = runtimeConfig.timeframe || 'M5';
+
+      try {
+        activeEventSource = new EventSource(`/api/stream?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+        
+        activeEventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'live') {
+              onLiveUpdate(data);
+            }
+          } catch (e) {}
+        };
+
+        activeEventSource.onerror = () => {
+          // SSE failed or disconnected, fall back to high-speed 1s polling
+          if (activeEventSource) {
+            activeEventSource.close();
+            activeEventSource = null;
+          }
+          if (!livePollTimer) {
+            livePollTimer = setInterval(pollLiveData, 1000);
+          }
+        };
+      } catch (e) {
+        if (!livePollTimer) {
+          livePollTimer = setInterval(pollLiveData, 1000);
+        }
+      }
+    }
+
+    async function pollLiveData() {
+      try {
+        const symbol = runtimeConfig.symbol || 'XAU_USD';
+        const timeframe = runtimeConfig.timeframe || 'M5';
+        const res = await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok) onLiveUpdate(data);
+        }
+      } catch (e) {}
+    }
+
+    // --- Full Initial Data Fetching ---
     async function loadAllData() {
       const loader = document.getElementById('loader-overlay');
       const subtext = document.getElementById('loading-subtext');
@@ -1602,6 +1957,10 @@
         hasMoreHistory = true;
         isLoadingHistory = false;
         renderDashboard();
+
+        // 6. Start Real-time Streaming and Bar Countdown
+        startCountdownTimer();
+        startRealtimeStream();
 
       } catch (err) {
         console.error('Error in loadAllData:', err);
@@ -1726,13 +2085,6 @@
     function resetZoom() {
       if (chartMain) chartMain.timeScale().fitContent();
     }
-
-    // Auto-refresh in background every 45 seconds
-    setInterval(() => {
-      if (document.getElementById('data-source-badge').classList.contains('live')) {
-        loadAllData();
-      }
-    }, 45000);
 
     window.addEventListener('DOMContentLoaded', () => {
       initCharts();

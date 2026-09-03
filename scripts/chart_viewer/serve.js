@@ -4,7 +4,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const config = require('../../src/config');
 
-const PORT = config.CHART_PORT || 3400;
+const PORT = process.env.CHART_PORT || config.CHART_PORT || 3400;
 const BRIDGE_URL = process.env.MT5_BRIDGE_URL || 'http://127.0.0.1:8000';
 const HTML_FILE_PATH = path.join(__dirname, 'index.html');
 const LOGS_DIR = path.resolve(process.cwd(), 'logs');
@@ -168,6 +168,124 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(HTML_FILE_PATH).pipe(res);
+    return;
+  }
+
+  // Route: Real-time Live Market Data (Tick + Forming Candle + Positions)
+  if (url.pathname === '/api/live') {
+    const symbol = url.searchParams.get('symbol') || config.SYMBOL || 'XAU_USD';
+    const timeframe = url.searchParams.get('timeframe') || config.TIMEFRAME || 'M5';
+
+    try {
+      const [tickData, candleData, posData] = await Promise.all([
+        fetchBridgeJson(`/price?symbol=${encodeURIComponent(symbol)}`, 1500),
+        fetchBridgeJson(`/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=3`, 1500),
+        fetchBridgeJson(`/positions?symbol=${encodeURIComponent(symbol)}`, 1500)
+      ]);
+
+      if (candleData && Array.isArray(candleData) && candleData.length > 0) {
+        sendJson(200, {
+          ok: true,
+          source: 'live',
+          symbol,
+          timeframe,
+          time: Math.floor(Date.now() / 1000),
+          tick: tickData || null,
+          candles: candleData,
+          latestCandle: candleData[candleData.length - 1],
+          positions: posData || []
+        });
+        return;
+      }
+    } catch (err) {
+      // fallback below
+    }
+
+    // Fallback response if bridge unreachable
+    sendJson(200, {
+      ok: false,
+      source: 'csv_fallback',
+      symbol,
+      timeframe,
+      time: Math.floor(Date.now() / 1000),
+      tick: null,
+      candles: [],
+      latestCandle: null,
+      positions: []
+    });
+    return;
+  }
+
+  // Route: Server-Sent Events (SSE) Real-time Stream
+  if (url.pathname === '/api/stream') {
+    const symbol = url.searchParams.get('symbol') || config.SYMBOL || 'XAU_USD';
+    const timeframe = url.searchParams.get('timeframe') || config.TIMEFRAME || 'M5';
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'connected', time: Math.floor(Date.now() / 1000) })}\n\n`);
+
+    let isClosed = false;
+    const streamInterval = setInterval(async () => {
+      if (isClosed) return;
+      try {
+        const [tickData, candleData, posData] = await Promise.all([
+          fetchBridgeJson(`/price?symbol=${encodeURIComponent(symbol)}`, 1200),
+          fetchBridgeJson(`/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&count=2`, 1200),
+          fetchBridgeJson(`/positions?symbol=${encodeURIComponent(symbol)}`, 1200)
+        ]);
+
+        if (candleData && Array.isArray(candleData) && candleData.length > 0) {
+          const payload = {
+            type: 'live',
+            source: 'live',
+            symbol,
+            timeframe,
+            time: Math.floor(Date.now() / 1000),
+            tick: tickData || null,
+            candles: candleData,
+            latestCandle: candleData[candleData.length - 1],
+            positions: posData || []
+          };
+          if (!isClosed) {
+            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+          }
+        }
+      } catch (e) {
+        // stream tick error, ignore and continue next interval
+      }
+    }, 1000);
+
+    req.on('close', () => {
+      isClosed = true;
+      clearInterval(streamInterval);
+    });
+    return;
+  }
+
+  // Route: Proxy Price
+  if (url.pathname === '/api/price') {
+    const symbol = url.searchParams.get('symbol') || config.SYMBOL || 'XAU_USD';
+    const priceData = await fetchBridgeJson(`/price?symbol=${encodeURIComponent(symbol)}`, 2000);
+    if (priceData) {
+      sendJson(200, priceData);
+    } else {
+      sendJson(503, { error: 'Price data currently unavailable from MT5 bridge.' });
+    }
+    return;
+  }
+
+  // Route: Proxy Positions
+  if (url.pathname === '/api/positions') {
+    const symbol = url.searchParams.get('symbol');
+    const endpoint = symbol ? `/positions?symbol=${encodeURIComponent(symbol)}` : '/positions';
+    const posData = await fetchBridgeJson(endpoint, 2000);
+    sendJson(200, posData || []);
     return;
   }
 
