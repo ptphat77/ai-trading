@@ -59,10 +59,16 @@ const config = {
   
   // --- Bot ---
   LOOP_INTERVAL_MS: parseInt(process.env.LOOP_INTERVAL_MS, 10) || 300000,
+  BOT_MODE: process.env.BOT_MODE || 'auto_trade', // 'auto_trade' | 'signal_only'
 
   // --- Chart Viewer ---
   CHART_PORT: parseInt(process.env.CHART_PORT, 10) || 3400,
-  TRADE_LOG_PATH: process.env.TRADE_LOG_PATH
+  TRADE_LOG_PATH: process.env.TRADE_LOG_PATH,
+
+  // --- Telegram Alerts ---
+  TELEGRAM_ALERTS_ENABLED: process.env.TELEGRAM_ALERTS_ENABLED === 'true',
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID
 };
 
 module.exports = Object.freeze(config);
