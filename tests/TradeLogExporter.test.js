@@ -124,8 +124,8 @@ describe('TradeLogExporter', () => {
     expect(writtenJson.summary.ai_filter_quality.ai_rejected_count).toBe(1);
     expect(writtenJson.summary.ai_filter_quality.avoided_losses_true_negative).toBe(1); // Rejected a loss
     expect(writtenJson.summary.ai_filter_quality.missed_wins_false_negative).toBe(0); 
-    expect(writtenJson.summary.ai_filter_quality.ai_ruined_win_count).toBe(0);
-    expect(writtenJson.summary.ai_filter_quality.ai_saved_loss_count).toBe(0);
+    expect(writtenJson.summary.execution_engine_impact.ruined_win_by_engine).toBe(0);
+    expect(writtenJson.summary.execution_engine_impact.saved_loss_by_engine).toBe(0);
 
     // Check signals array
     expect(writtenJson.signals).toHaveLength(2);

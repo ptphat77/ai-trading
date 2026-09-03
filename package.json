@@ -7,6 +7,7 @@
     "start": "node scripts/run_live.js",
     "backtest": "node scripts/run_backtest.js",
     "chart": "node scripts/chart_viewer/serve.js",
+    "bridge": "python scripts/mt5_bridge/main.py",
     "test": "npx jest"
   },
   "dependencies": {

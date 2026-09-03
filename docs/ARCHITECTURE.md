@@ -9,8 +9,9 @@
 
 | Component | Technology | Reason |
 |---|---|---|
-| Runtime | Node.js | Simple, suitable for I/O-bound (continuous API calls) |
-| Broker API | Broker REST API (configurable via `.env`) | Decoupled — swap broker by changing `BROKER_BASE_URL` in `.env` |
+| Runtime | Node.js (Bot & Chart Server), Python (MT5 Bridge) | Simple I/O-bound bot, robust MT5 integration via official Python library |
+| Broker API | MT5 Python FastAPI Bridge (Local) | Reliable local bridge connecting directly to MetaTrader 5 terminal |
+| Web Dashboard | HTML/JS/CSS + Lightweight Charts | Real-time monitoring, strategy KPIs, and infinite historical scrolling |
 | AI Engine | **Pluggable** via `AIAgentFactory` — default: Qwen (Alibaba DashScope); alternative: Google Gemini. Switch by setting `AI_PROVIDER` in `.env`. | Final decision making based on technical context |
 | Indicators | `technicalindicators` (npm) | Reusable, verified, avoids rewriting MA/RSI/ATR |
 | HTTP client | `axios` | Call Broker API + AI Provider API |
@@ -69,7 +70,9 @@ TradeBot_XAU/
 │
 └── scripts/
     ├── run_live.js                ← Entry point: run real/demo bot
-    └── run_backtest.js            ← Entry point: run backtest
+    ├── run_backtest.js            ← Entry point: run backtest
+    ├── mt5_bridge/                ← Python FastAPI connecting to local MT5
+    └── chart_viewer/              ← Web dashboard (Node.js server + HTML/JS UI)
 ```
 
 ## 3. Layered Architecture
@@ -85,8 +88,8 @@ Reads a local CSV file exported from any broker platform (e.g. MT5, TradingView,
 - `getAccountBalance()`, `createOrder()`, `getOpenPositions()`, `closePosition()` — all **mocked** (log to console, return fake IDs)
 
 #### `BrokerClient.js` — used in Phase 3 (Paper Trading) & Phase 4 (Live Trading)
-Only responsible for communicating with the Broker REST API, contains no business logic. The actual broker is determined solely by `BROKER_BASE_URL` and `BROKER_API_KEY` in `.env` — **no code changes needed to switch brokers**.
-- `getCandles(count, granularity)` — Fetch last N candles from broker
+Communicates with the local **MT5 Python FastAPI Bridge** (default port `8000`) or a generic Broker REST API.
+- `getCandles(count, granularity)` — Fetch last N candles from broker/bridge
 - `getAccountBalance()` — Get real account balance
 - `createOrder(side, units, sl, tp)` — Place Market order with SL/TP
 - `getOpenPositions()` — Check open positions
@@ -199,6 +202,5 @@ flowchart TD
 ## 7. Future Extension Points (out of current scope)
 
 - Multi-symbol / multi-timeframe
-- Real-time monitoring dashboard (if implemented, `UI-DESIGN.md` needs to be added)
 - Switch from SQLite to another DB if backtest data volume becomes much larger
 - Adding a new AI provider: implement `src/ai/NewProviderAgent.js` extending `BaseAIAgent`, add a new case in `AIAgentFactory.createAgent()`, add the corresponding API key/model vars to `.env` and `DATA-SCHEMA.md §1`.

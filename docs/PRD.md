@@ -34,14 +34,15 @@ Automated Gold (XAU/USD) trading bot: uses technical indicators (MA, RSI, ADX, A
 
 ### In scope — Phase 1
 - Backtest engine (Rule-based and AI-simulated modes)
-- Paper trading on a Broker Demo account (configured via `BROKER_BASE_URL` in `.env`)
+- Paper trading on a Broker Demo account
 - 1 symbol: XAU_USD, 1 timeframe: M5
 - Risk management by fixed account %
+- Real-time MT5 connection (Python FastAPI Bridge) for live streaming OHLCV data and ticks
+- Local Web Monitoring Dashboard (Chart Viewer, Strategy KPIs, Equity Curve, Trade Journal)
 
 ### Out of scope — Phase 1
 - Live trading with real money (only deploy after Demo runs stably for ≥ 1 continuous week — see Phase 4 in Verification Plan, `ARCHITECTURE.md`)
 - Multi-symbol / multi-timeframe
-- User Interface (monitoring dashboard) — can be added in a later phase, which will require `UI-DESIGN.md`
 
 ## 5. Target Audience
 
