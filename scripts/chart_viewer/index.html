@@ -59,20 +59,24 @@
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border-color);
-      padding: 8px 16px;
+      padding: 6px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 12px;
       z-index: 100;
       flex-shrink: 0;
+      min-height: 46px;
+      overflow-x: auto;
     }
 
     .header-left {
       display: flex;
       align-items: center;
-      gap: 14px;
-      flex-wrap: wrap;
+      gap: 12px;
+      flex-wrap: nowrap;
+      flex-shrink: 1;
+      min-width: 0;
     }
 
     .brand-group {
@@ -419,26 +423,31 @@
     .info-value.bearish { color: var(--bearish-color); }
 
     .chart-container {
-      flex: 1;
+      flex: 1 1 0%;
       display: flex;
       flex-direction: column;
       position: relative;
       background-color: var(--bg-primary);
       min-height: 0;
+      overflow: hidden;
     }
 
     .panel-wrapper {
       position: relative;
       width: 100%;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .panel-wrapper.main-panel {
-      flex: 62;
+      flex: 62 1 0%;
+      min-height: 0;
       border-bottom: 1px solid var(--border-color);
     }
 
     .panel-wrapper.sub-panel {
-      flex: 19;
+      flex: 19 1 0%;
+      min-height: 0;
       border-bottom: 1px solid var(--border-color);
     }
 
@@ -470,6 +479,11 @@
     .chart-div {
       width: 100%;
       height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
     }
     
     #chart-viewport a, #equity-chart-viewport a {
@@ -932,6 +946,16 @@
         <option value="all">All History</option>
       </select>
 
+      <select id="timezone-select" class="select-dropdown" onchange="onTimezoneChange(event)" title="Select Chart Timezone">
+        <option value="Asia/Bangkok" selected>UTC+7 (Việt Nam)</option>
+        <option value="UTC">UTC+0 (London / UTC)</option>
+        <option value="Europe/Athens">UTC+3 (MT5 Summer / EEST)</option>
+        <option value="Europe/Helsinki">UTC+2 (MT5 Winter / EET)</option>
+        <option value="America/New_York">UTC-4/5 (New York)</option>
+        <option value="Asia/Tokyo">UTC+9 (Tokyo / JST)</option>
+        <option value="local">Local (Trình duyệt)</option>
+      </select>
+
       <select id="trade-mode-select" class="select-dropdown" onchange="onTradeModeChange(event)">
         <option value="rule_base">All Rule Signals</option>
         <option value="ai_actual">AI Accepted Actual</option>
@@ -1101,7 +1125,7 @@
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>Time (UTC)</th>
+                    <th id="journal-th-time">Time (UTC+7)</th>
                     <th>Side</th>
                     <th>Entry</th>
                     <th>Stop Loss</th>
@@ -1133,6 +1157,13 @@
   </div>
 
   <script>
+    // --- Broker Timezone Config ---
+    const BROKER_UTC_OFFSET_HOURS = 3; // MT5 is currently UTC+3
+    function correctTime(unixSec) {
+      if (!unixSec || isNaN(unixSec)) return unixSec;
+      return unixSec - (BROKER_UTC_OFFSET_HOURS * 3600);
+    }
+
     // --- Global State ---
     let currentView = 'chart'; // 'chart' | 'dashboard'
     let candleData = [];
@@ -1191,15 +1222,145 @@
     const atrFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 
+    // --- Timezone State & Formatters ---
+    let currentTimezone = 'Asia/Bangkok';
+
+    function getTimezoneLabel(tz) {
+      switch (tz) {
+        case 'Asia/Bangkok':
+        case 'Asia/Ho_Chi_Minh':
+          return 'UTC+7';
+        case 'UTC':
+          return 'UTC';
+        case 'Europe/Athens':
+          return 'UTC+3';
+        case 'Europe/Helsinki':
+        case 'Europe/Berlin':
+          return 'UTC+2';
+        case 'America/New_York':
+          return 'NY';
+        case 'Asia/Tokyo':
+          return 'UTC+9';
+        case 'local':
+          return 'Local';
+        default:
+          return tz || 'UTC';
+      }
+    }
+
     function formatTime(unixSec) {
+      if (!unixSec || isNaN(unixSec)) return '--';
       const d = new Date(unixSec * 1000);
-      const Y = d.getUTCFullYear();
-      const M = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const D = String(d.getUTCDate()).padStart(2, '0');
-      const h = String(d.getUTCHours()).padStart(2, '0');
-      const m = String(d.getUTCMinutes()).padStart(2, '0');
-      const s = String(d.getUTCSeconds()).padStart(2, '0');
-      return `${Y}-${M}-${D} ${h}:${m}:${s} UTC`;
+      if (isNaN(d.getTime())) return '--';
+      try {
+        const tz = currentTimezone === 'local' ? undefined : currentTimezone;
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }).formatToParts(d);
+
+        const map = {};
+        for (const p of parts) {
+          map[p.type] = p.value;
+        }
+        const tzLabel = getTimezoneLabel(currentTimezone);
+        return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second} ${tzLabel}`;
+      } catch (err) {
+        return d.toISOString();
+      }
+    }
+
+    function extractTimestamp(time) {
+      if (typeof time === 'number') return time;
+      if (time && typeof time.timestamp === 'number') return time.timestamp;
+      if (time && typeof time === 'object' && time.year) {
+        return Math.floor(Date.UTC(time.year, (time.month || 1) - 1, time.day || 1, time.hour || 0, time.minute || 0, time.second || 0) / 1000);
+      }
+      if (time instanceof Date) return Math.floor(time.getTime() / 1000);
+      return null;
+    }
+
+    function formatTickMark(time, tickMarkType) {
+      const ts = extractTimestamp(time);
+      if (ts === null) return null;
+      const d = new Date(ts * 1000);
+      if (isNaN(d.getTime())) return null;
+
+      const tz = currentTimezone === 'local' ? undefined : currentTimezone;
+      const opts = { timeZone: tz, hour12: false };
+
+      try {
+        if (tickMarkType === 0) {
+          opts.year = 'numeric';
+          return new Intl.DateTimeFormat('en-US', opts).format(d);
+        } else if (tickMarkType === 1) {
+          opts.month = 'short';
+          return new Intl.DateTimeFormat('en-US', opts).format(d);
+        } else if (tickMarkType === 2) {
+          opts.day = '2-digit';
+          opts.month = 'short';
+          return new Intl.DateTimeFormat('en-US', opts).format(d);
+        } else if (tickMarkType === 3) {
+          opts.hour = '2-digit';
+          opts.minute = '2-digit';
+          return new Intl.DateTimeFormat('en-GB', opts).format(d);
+        } else if (tickMarkType === 4) {
+          opts.hour = '2-digit';
+          opts.minute = '2-digit';
+          opts.second = '2-digit';
+          return new Intl.DateTimeFormat('en-GB', opts).format(d);
+        }
+        opts.hour = '2-digit';
+        opts.minute = '2-digit';
+        return new Intl.DateTimeFormat('en-GB', opts).format(d);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function onTimezoneChange(event) {
+      currentTimezone = event.target.value;
+      localStorage.setItem('chart_timezone', currentTimezone);
+
+      const tzOptions = {
+        localization: {
+          timeFormatter: (timeSec) => formatTime(timeSec),
+        }
+      };
+
+      const scaleOptions = {
+        ...tzOptions,
+        timeScale: {
+          visible: true,
+          timeVisible: true,
+          secondsVisible: false,
+          borderColor: '#2b2f3a',
+          tickMarkFormatter: (time, tickMarkType) => formatTickMark(time, tickMarkType),
+        }
+      };
+
+      if (chartMain) chartMain.applyOptions(tzOptions);
+      if (chartRsi) chartRsi.applyOptions(tzOptions);
+      if (chartAtr) chartAtr.applyOptions(scaleOptions);
+      if (equityChart) equityChart.applyOptions(scaleOptions);
+
+      showLatestHUD();
+
+      if (currentInspectorTime) {
+        updateSignalInspector(currentInspectorTime);
+      }
+
+      const thTime = document.getElementById('journal-th-time');
+      if (thTime) {
+        thTime.textContent = `Time (${getTimezoneLabel(currentTimezone)})`;
+      }
+      renderEquityAndJournal();
     }
 
     // --- View Switching ---
@@ -1353,6 +1514,7 @@
 
     // --- Chart Setup ---
     const chartBaseOptions = {
+      autoSize: true,
       layout: {
         background: { type: 'solid', color: '#131722' },
         textColor: '#868993',
@@ -1368,11 +1530,34 @@
         vertLine: { color: 'rgba(130, 177, 255, 0.45)', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#1e222d' },
         horzLine: { color: 'rgba(130, 177, 255, 0.45)', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#1e222d' },
       },
+      localization: {
+        timeFormatter: (timeSec) => formatTime(timeSec),
+      },
       rightPriceScale: {
         borderColor: '#2b2f3a',
         minimumWidth: PRICE_SCALE_WIDTH,
       },
     };
+
+    function resizeAllCharts() {
+      const mainEl = document.getElementById('chart-main');
+      const rsiEl = document.getElementById('chart-rsi');
+      const atrEl = document.getElementById('chart-atr');
+      const eqEl = document.getElementById('equity-chart');
+
+      if (chartMain && mainEl && mainEl.clientWidth > 0 && mainEl.clientHeight > 0) {
+        chartMain.applyOptions({ width: mainEl.clientWidth, height: mainEl.clientHeight });
+      }
+      if (chartRsi && rsiEl && rsiEl.clientWidth > 0 && rsiEl.clientHeight > 0) {
+        chartRsi.applyOptions({ width: rsiEl.clientWidth, height: rsiEl.clientHeight });
+      }
+      if (chartAtr && atrEl && atrEl.clientWidth > 0 && atrEl.clientHeight > 0) {
+        chartAtr.applyOptions({ width: atrEl.clientWidth, height: atrEl.clientHeight });
+      }
+      if (equityChart && eqEl && eqEl.clientWidth > 0 && eqEl.clientHeight > 0) {
+        equityChart.applyOptions({ width: eqEl.clientWidth, height: eqEl.clientHeight });
+      }
+    }
 
     function initCharts() {
       const mainEl = document.getElementById('chart-main');
@@ -1414,7 +1599,13 @@
 
       chartAtr = LightweightCharts.createChart(atrEl, {
         ...chartBaseOptions,
-        timeScale: { visible: true, timeVisible: true, secondsVisible: false, borderColor: '#2b2f3a' },
+        timeScale: {
+          visible: true,
+          timeVisible: true,
+          secondsVisible: false,
+          borderColor: '#2b2f3a',
+          tickMarkFormatter: (time, tickMarkType) => formatTickMark(time, tickMarkType)
+        },
         rightPriceScale: { ...chartBaseOptions.rightPriceScale, scaleMargins: { top: 0.15, bottom: 0.15 } }
       });
 
@@ -1451,7 +1642,13 @@
       const eqEl = document.getElementById('equity-chart');
       equityChart = LightweightCharts.createChart(eqEl, {
         ...chartBaseOptions,
-        timeScale: { visible: true, timeVisible: true, secondsVisible: false, borderColor: '#2b2f3a' },
+        timeScale: {
+          visible: true,
+          timeVisible: true,
+          secondsVisible: false,
+          borderColor: '#2b2f3a',
+          tickMarkFormatter: (time, tickMarkType) => formatTickMark(time, tickMarkType)
+        },
         rightPriceScale: { ...chartBaseOptions.rightPriceScale, scaleMargins: { top: 0.2, bottom: 0.2 } }
       });
       equitySeries = equityChart.addAreaSeries({
@@ -1468,6 +1665,16 @@
         inspectorCardEl.addEventListener('mouseleave', () => { isMouseOverInspector = false; });
       }
 
+      // Responsive Resize Observer
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+          resizeAllCharts();
+        });
+        const vp = document.getElementById('chart-viewport');
+        const eqVp = document.getElementById('equity-chart-viewport');
+        if (vp) ro.observe(vp);
+        if (eqVp) ro.observe(eqVp);
+      }
       window.addEventListener('resize', resizeAllCharts);
     }
 
@@ -2053,7 +2260,7 @@
       // 4. Update Forming / New Candle on Lightweight Charts
       if (!data.latestCandle || candleData.length === 0 || !candleSeries) return;
 
-      const incoming = data.latestCandle;
+      const incoming = { ...data.latestCandle, time: correctTime(data.latestCandle.time) };
       const last = candleData[candleData.length - 1];
 
       if (incoming.time === last.time) {
@@ -2242,7 +2449,11 @@
           sourceText.textContent = 'CSV Fallback';
         }
 
-        candleData = candlesJson.candles || [];
+        let rawCandles = candlesJson.candles || [];
+        candleData = rawCandles.map(c => ({
+          ...c,
+          time: correctTime(c.time)
+        }));
         if (candleData.length === 0) throw new Error('No candlestick data returned.');
 
         document.getElementById('symbol-display').textContent = (candlesJson.symbol || 'XAU_USD').replace('_', '/');
@@ -2296,7 +2507,11 @@
           if (signalsRes.ok) {
             const signalsJson = await signalsRes.json();
             if (signalsJson.ok && signalsJson.signals && signalsJson.signals.length > 0) {
-              tradeData = signalsJson.signals;
+              tradeData = signalsJson.signals.map(s => ({
+                ...s,
+                time: correctTime(s.time),
+                timestamp: correctTime(s.timestamp)
+              }));
               renderTradeMarkers();
               loadedSignals = true;
             }
@@ -2310,7 +2525,13 @@
             const tradesRes = await fetch('/api/trades');
             if (tradesRes.ok) {
               const tradesJson = await tradesRes.json();
-              tradeData = tradesJson.signals || [];
+              tradeData = (tradesJson.signals || []).map(s => ({
+                ...s,
+                time: correctTime(s.time),
+                timestamp: correctTime(s.timestamp),
+                entryTime: correctTime(s.entryTime),
+                exitTime: correctTime(s.exitTime)
+              }));
               renderTradeMarkers();
             }
           } catch (e) {}
@@ -2322,6 +2543,7 @@
         hasMoreHistory = true;
         isLoadingHistory = false;
         renderDashboard();
+        resizeAllCharts();
 
         // 6. Start Real-time Streaming and Bar Countdown
         startCountdownTimer();
@@ -2347,23 +2569,29 @@
 
       const oldestTime = candleData[0].time;
       const countBadge = document.getElementById('candles-count');
-      const prevCountText = countBadge ? countBadge.textContent : '';
-      if (countBadge) countBadge.textContent = '⏳ Loading older candles...';
+      if (countBadge) countBadge.textContent = `Total: ${candleData.length.toLocaleString()} candles (Loading older...)`;
 
       try {
+        isSyncingRange = true;
+        // Adjust request time back to server's raw UTC time before sending
+        const originalOldestTime = oldestTime + (BROKER_UTC_OFFSET_HOURS * 3600);
+
         const [candlesRes, signalsRes] = await Promise.all([
-          fetch(`/api/candles?count=2000&before_time=${oldestTime}`),
-          fetch(`/api/signals?count=2000&before_time=${oldestTime}`)
+          fetch(`/api/candles?count=2000&before_time=${originalOldestTime}`),
+          fetch(`/api/signals?count=2000&before_time=${originalOldestTime}`)
         ]);
 
         if (!candlesRes.ok) {
           hasMoreHistory = false;
-          if (countBadge) countBadge.textContent = prevCountText;
           return;
         }
 
         const json = await candlesRes.json();
-        const olderCandles = json.candles || [];
+        let olderCandles = json.candles || [];
+        olderCandles = olderCandles.map(c => ({
+          ...c,
+          time: correctTime(c.time)
+        }));
 
         if (olderCandles.length === 0) {
           hasMoreHistory = false;
@@ -2445,7 +2673,13 @@
                   : Math.floor(new Date(t.time).getTime() / 1000);
               }));
 
-              const freshSigs = sigJson.signals.filter(s => {
+              const mappedSigs = sigJson.signals.map(s => ({
+                ...s,
+                time: correctTime(s.time),
+                timestamp: correctTime(s.timestamp)
+              }));
+
+              const freshSigs = mappedSigs.filter(s => {
                 const st = typeof s.time === 'number'
                   ? (s.time > 1e11 ? Math.floor(s.time / 1000) : s.time)
                   : Math.floor(new Date(s.time).getTime() / 1000);
@@ -2483,6 +2717,16 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      const savedTz = localStorage.getItem('chart_timezone') || 'Asia/Bangkok';
+      currentTimezone = savedTz;
+      const tzSelect = document.getElementById('timezone-select');
+      if (tzSelect) {
+        tzSelect.value = savedTz;
+      }
+      const thTime = document.getElementById('journal-th-time');
+      if (thTime) {
+        thTime.textContent = `Time (${getTimezoneLabel(currentTimezone)})`;
+      }
       initCharts();
       loadAllData();
     });
