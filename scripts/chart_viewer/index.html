@@ -1743,17 +1743,37 @@
           return;
         }
 
-        // Reset manual close flag when hovering a different signal
-        manuallyClosedSignalTime = null;
-
         const tData = tradeLookupMap.get(t);
-        if (currentInspectorTime !== t) {
-          clearActivePriceLines();
-          if (tData.entry_price) activePriceLines.push(candleSeries.createPriceLine({ price: tData.entry_price, color: 'rgba(255,255,255,0.7)', lineWidth: 1, title: 'ENTRY' }));
-          if (tData.sl) activePriceLines.push(candleSeries.createPriceLine({ price: tData.sl, color: 'rgba(242,54,69,0.85)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'SL' }));
-          if (tData.tp) activePriceLines.push(candleSeries.createPriceLine({ price: tData.tp, color: 'rgba(8,153,129,0.85)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'TP' }));
+        let isHoveringMarker = false;
 
-          updateSignalInspector(t);
+        if (param.point && data.candle) {
+           const y = param.point.y;
+           const highY = candleSeries.priceToCoordinate(data.candle.high);
+           const lowY = candleSeries.priceToCoordinate(data.candle.low);
+           
+           if (tData.side === 'BUY') {
+              if (y !== null && lowY !== null && y >= lowY - 10 && y <= lowY + 60) {
+                  isHoveringMarker = true;
+              }
+           } else {
+              if (y !== null && highY !== null && y <= highY + 10 && y >= highY - 60) {
+                  isHoveringMarker = true;
+              }
+           }
+        }
+
+        if (isHoveringMarker) {
+          // Reset manual close flag when hovering a different signal
+          manuallyClosedSignalTime = null;
+
+          if (currentInspectorTime !== t) {
+            clearActivePriceLines();
+            if (tData.entry_price) activePriceLines.push(candleSeries.createPriceLine({ price: tData.entry_price, color: 'rgba(255,255,255,0.7)', lineWidth: 1, title: 'ENTRY' }));
+            if (tData.sl) activePriceLines.push(candleSeries.createPriceLine({ price: tData.sl, color: 'rgba(242,54,69,0.85)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'SL' }));
+            if (tData.tp) activePriceLines.push(candleSeries.createPriceLine({ price: tData.tp, color: 'rgba(8,153,129,0.85)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'TP' }));
+
+            updateSignalInspector(t);
+          }
         }
       } else if (sourceChart === chartMain) {
         // Reset manual close flag when moving away from the signal
