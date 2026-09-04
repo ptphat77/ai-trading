@@ -530,10 +530,25 @@ class BacktestEngine {
 
       // 5. Handle Decision and Risk Management
       let executedOrder = null;
+      let nextTime = currentCandle.time;
+
       if (
         (decision.action === 'buy' || decision.action === 'sell') &&
         decision.confidence >= config.MIN_CONFIDENCE
       ) {
+        if (candles[i + 1]) {
+          nextTime = candles[i + 1].time;
+        } else {
+          const timeframeMs = (config.TIMEFRAME === 'M15' ? 15 : (config.TIMEFRAME === 'H1' ? 60 : 5)) * 60000;
+          if (typeof currentCandle.time === 'number') {
+            const isMs = currentCandle.time > 1e11;
+            const ms = isMs ? currentCandle.time : currentCandle.time * 1000;
+            nextTime = isMs ? (ms + timeframeMs) : ((ms + timeframeMs) / 1000);
+          } else {
+            nextTime = new Date(new Date(currentCandle.time).getTime() + timeframeMs).toISOString();
+          }
+        }
+
         const currentPrice = currentCandle.close;
         const atr = context.indicators.atr;
 
@@ -566,7 +581,7 @@ class BacktestEngine {
                 symbol: config.SYMBOL,
                 side: decision.action,
                 entryPrice: currentPrice,
-                entryTime: currentCandle.time,
+                entryTime: nextTime,
                 sl,
                 tp,
                 units,
@@ -596,7 +611,7 @@ class BacktestEngine {
 
       // 6. Record Log Entry (DATA-SCHEMA.md §6)
       const logEntry = {
-        timestamp: currentCandle.time,
+        timestamp: executedOrder ? nextTime : currentCandle.time,
         symbol: config.SYMBOL,
         action: decision.action,
         reason: decision.reason,
