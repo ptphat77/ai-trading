@@ -2096,6 +2096,21 @@
         }
 
         if (!isCrosshairUserHovering) showLatestHUD();
+        
+        // --- FETCH NEW SIGNALS ---
+        // Whenever a new candle closes and a new one starts, we check if any new signals were generated
+        fetch('/api/signals?refresh=1')
+          .then(res => res.json())
+          .then(sigJson => {
+            if (sigJson.ok && sigJson.signals && sigJson.signals.length > 0) {
+              // Ensure we only update if there's an actual change to prevent UI flickering
+              if (tradeData.length !== sigJson.signals.length) {
+                tradeData = sigJson.signals;
+                renderTradeMarkers();
+              }
+            }
+          })
+          .catch(err => console.warn('Failed to refresh signals on new candle:', err));
       }
     }
 

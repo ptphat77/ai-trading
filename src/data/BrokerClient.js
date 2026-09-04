@@ -30,15 +30,49 @@ class BrokerClient {
   }
 
   /**
-   * Fetch last N candles from the broker.
-   * GET /v3/accounts/{accountId}/instruments/{symbol}/candles
+   * Fetch last N candles from the MT5 Python Bridge.
+   * GET http://127.0.0.1:8000/candles
    *
    * @param {number} count
    * @param {string} granularity - e.g. 'M5'
-   * @returns {Promise<Object[]>} Array of Candle objects (mapped to DATA-SCHEMA.md format)
+   * @returns {Promise<Object[]>} Array of Candle objects
    */
-  async getCandles(count, granularity) {
-    throw new Error('BrokerClient.getCandles() not implemented — Phase 3/4 only');
+  async getCandles(count, granularity = 'M5') {
+    const axios = require('axios');
+    try {
+      // Connect to the MT5 Python Bridge running locally
+      const bridgeUrl = config.BRIDGE_URL || 'http://127.0.0.1:8000';
+      const symbol = config.SYMBOL || 'XAU_USD';
+      
+      const response = await axios.get(`${bridgeUrl}/candles`, {
+        params: {
+          symbol: symbol,
+          timeframe: granularity,
+          count: count + 1 // Fetch 1 extra to account for the currently forming candle
+        }
+      });
+      
+      if (!response.data || !Array.isArray(response.data)) {
+        throw new Error('Invalid response from MT5 Bridge');
+      }
+      
+      // MT5 returns the current forming (unclosed) candle as the very last item.
+      // We must drop it so that the bot's indicators and signals are only evaluated on fully closed candles.
+      const closedCandles = response.data.slice(0, -1);
+      
+      // Map to DATA-SCHEMA.md format
+      return closedCandles.map(c => ({
+        time: new Date(c.time * 1000).toISOString(),
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume
+      }));
+    } catch (error) {
+      console.error('[BrokerClient] Lỗi khi lấy nến từ MT5 Bridge:', error.message);
+      throw error;
+    }
   }
 
   /**
