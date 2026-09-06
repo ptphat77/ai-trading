@@ -650,8 +650,33 @@ const server = http.createServer(async (req, res) => {
       const engine = new BacktestEngine({ candles: formattedCandles });
       const result = await engine.runRuleBased();
 
+      const allTrades = [...(result.trades || [])];
+      if (result.openPosition) {
+        // Enrich with AI data if the origin log exists, so UI shows the AI tooltip
+        let aiData = null;
+        if (result.openPosition.logIdx !== undefined && result.logs && result.logs[result.openPosition.logIdx]) {
+          aiData = result.logs[result.openPosition.logIdx].gemini_raw_response;
+        }
+
+        allTrades.push({
+          id: `trade_${allTrades.length + 1}`,
+          symbol: result.openPosition.symbol,
+          side: result.openPosition.side,
+          entryTime: result.openPosition.entryTime,
+          entryPrice: result.openPosition.entryPrice,
+          exitTime: null,
+          exitPrice: null,
+          exitReason: null,
+          sl: result.openPosition.sl,
+          tp: result.openPosition.tp,
+          units: result.openPosition.units,
+          outcome: 'open',
+          ai: aiData
+        });
+      }
+
       // Transform result trades into signals array
-      const signals = (result.trades || []).map((t, idx) => {
+      const signals = allTrades.map((t, idx) => {
         const timeSec = typeof t.entryTime === 'number'
           ? (t.entryTime > 1e11 ? Math.floor(t.entryTime / 1000) : t.entryTime)
           : Math.floor(new Date(t.entryTime).getTime() / 1000);
@@ -671,7 +696,7 @@ const server = http.createServer(async (req, res) => {
             exit_price: t.exitPrice,
             exit_time: t.exitTime
           },
-          ai: null
+          ai: t.ai || null
         };
       });
 

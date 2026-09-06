@@ -691,6 +691,7 @@ class BacktestEngine {
       initialBalance,
       finalBalance: Number(currentBalance.toFixed(2)),
       trades,
+      openPosition, // Expose open position to the frontend
       logs,
       candlesCount: candles.length,
       allCandles: candles  // exposed for TradeLogExporter forward simulation
