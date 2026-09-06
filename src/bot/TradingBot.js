@@ -1,6 +1,8 @@
 const CsvDataClient = require('../data/CsvDataClient');
 const AIAgentFactory = require('../ai/AIAgentFactory');
 const SignalBuilder = require('./SignalBuilder');
+const { evaluateRule } = require('../strategy/RuleEngine');
+const { calculateFixedSlTp } = require('../strategy/SlTpCalculator');
 const { calculateUnits } = require('./RiskManager');
 const notifier = require('../utils/notifier');
 const { log } = require('../utils/logger');
@@ -48,7 +50,7 @@ class TradingBot {
     }
 
     // 2. Đánh giá tín hiệu kỹ thuật (Tier 1: Rule-based)
-    const ruleDecision = this._evaluateRuleDecision(context);
+    const ruleDecision = evaluateRule(context, config);
     log('info', `[Rule Check] Action: ${ruleDecision.action.toUpperCase()} | Reason: ${ruleDecision.reason}`);
 
     // Nếu không có tín hiệu Buy/Sell từ Rule -> Skip chu kỳ này
@@ -60,22 +62,13 @@ class TradingBot {
       };
     }
 
-    // 3. Tính toán SL, TP tham khảo từ ATR
+    // 3. Tính toán SL, TP (đã được tính động từ RuleEngine)
     const currentPrice = context.currentPrice;
     const atr = context.indicators.atr || 1.0;
-    const defaultSlMultiplier = config.DEFAULT_SL_ATR_MULTIPLIER || 1.2;
-    const defaultTpMultiplier = config.DEFAULT_TP_ATR_MULTIPLIER || 1.8;
+    const slMultiplier = ruleDecision.sl_atr_multiplier || config.DEFAULT_SL_ATR_MULTIPLIER || 1.2;
+    const tpMultiplier = ruleDecision.tp_atr_multiplier || config.DEFAULT_TP_ATR_MULTIPLIER || 1.8;
 
-    const slDistance = Number((defaultSlMultiplier * atr).toFixed(2));
-    const tpDistance = Number((defaultTpMultiplier * atr).toFixed(2));
-
-    const sl = ruleDecision.action === 'buy'
-      ? Number((currentPrice - slDistance).toFixed(2))
-      : Number((currentPrice + slDistance).toFixed(2));
-
-    const tp = ruleDecision.action === 'buy'
-      ? Number((currentPrice + tpDistance).toFixed(2))
-      : Number((currentPrice - tpDistance).toFixed(2));
+    const { sl, tp, slDistance, tpDistance } = calculateFixedSlTp(ruleDecision.action, currentPrice, atr, slMultiplier, tpMultiplier);
 
     const calculatedOrder = {
       entryPrice: currentPrice,
@@ -178,70 +171,7 @@ class TradingBot {
     };
   }
 
-  /**
-   * Evaluates technical rules (Tier 1).
-   * @private
-   */
-  _evaluateRuleDecision(context) {
-    const { indicators } = context;
-    const rsi = indicators.rsi;
-    const adx = indicators.adx ?? 25;
-    const maCross = indicators.ma_cross;
-    const h1Trend = indicators.h1_trend || 'neutral';
 
-    const adxThreshold = this.config.ADX_THRESHOLD || 20;
-    const rsiBuyMin = this.config.RSI_BUY_MIN || 40;
-    const rsiBuyMax = this.config.RSI_BUY_MAX || 65;
-    const rsiSellMin = this.config.RSI_SELL_MIN || 35;
-    const rsiSellMax = this.config.RSI_SELL_MAX || 60;
-
-    if (adx <= adxThreshold) {
-      return {
-        action: 'skip',
-        reason: `ADX (${adx}) <= ${adxThreshold} - Thị trường sideway/không có sóng.`
-      };
-    }
-
-    const isBullishCandle = indicators.candle_body === 'bullish' || indicators.candle_wick_rejection === 'bottom_wick';
-    const notOverextended = (indicators.distance_to_ma21_atr || 0) <= 1.2;
-
-    // BUY Rule
-    if (
-      (h1Trend === 'uptrend' || h1Trend === 'neutral_permissive') &&
-      maCross === 'bullish_cross' &&
-      rsi >= rsiBuyMin &&
-      rsi <= rsiBuyMax &&
-      isBullishCandle &&
-      notOverextended
-    ) {
-      return {
-        action: 'buy',
-        reason: `Tín hiệu BUY: H1 Uptrend, M5 Bullish Cross, RSI (${rsi}) trong [${rsiBuyMin}, ${rsiBuyMax}], ADX (${adx}) > ${adxThreshold}`
-      };
-    }
-
-    const isBearishCandle = indicators.candle_body === 'bearish' || indicators.candle_wick_rejection === 'top_wick';
-
-    // SELL Rule
-    if (
-      (h1Trend === 'downtrend' || h1Trend === 'neutral_permissive') &&
-      maCross === 'bearish_cross' &&
-      rsi >= rsiSellMin &&
-      rsi <= rsiSellMax &&
-      isBearishCandle &&
-      notOverextended
-    ) {
-      return {
-        action: 'sell',
-        reason: `Tín hiệu SELL: H1 Downtrend, M5 Bearish Cross, RSI (${rsi}) trong [${rsiSellMin}, ${rsiSellMax}], ADX (${adx}) > ${adxThreshold}`
-      };
-    }
-
-    return {
-      action: 'skip',
-      reason: `Chưa thỏa mãn điều kiện chiến lược (Cross: ${maCross}, RSI: ${rsi}, H1: ${h1Trend})`
-    };
-  }
 
   /**
    * Main bot loop.

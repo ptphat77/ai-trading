@@ -124,7 +124,10 @@ describe('BacktestEngine', () => {
           ma_cross: 'bullish_cross',
           rsi: 25,
           adx: 25,
-          atr: 2
+          atr: 2,
+          candle_body: 'bullish',
+          candle_wick_rejection: 'none',
+          distance_to_ma21_atr: 1.0
         }
       });
 
@@ -163,11 +166,16 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          h1_trend: 'uptrend',
           ma9: 2005,
           ma21: 1995,
           ma_cross: 'bullish_cross',
           rsi: 28,
-          atr: 2
+          adx: 25,
+          atr: 2,
+          candle_body: 'bullish',
+          candle_wick_rejection: 'none',
+          distance_to_ma21_atr: 1.0
         }
       });
 
@@ -210,7 +218,10 @@ describe('BacktestEngine', () => {
           ma_cross: 'bearish_cross',
           rsi: 75,
           adx: 25,
-          atr: 2
+          atr: 2,
+          candle_body: 'bearish',
+          candle_wick_rejection: 'none',
+          distance_to_ma21_atr: 1.0
         }
       });
 
@@ -248,11 +259,16 @@ describe('BacktestEngine', () => {
         timeframe: 'M5',
         currentPrice: 2000,
         indicators: {
+          h1_trend: 'uptrend',
           ma9: 2005,
           ma21: 1995,
           ma_cross: 'bullish_cross',
           rsi: 20,
-          atr: 2
+          adx: 25,
+          atr: 2,
+          candle_body: 'bullish',
+          candle_wick_rejection: 'none',
+          distance_to_ma21_atr: 1.0
         }
       });
 

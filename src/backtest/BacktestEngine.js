@@ -1,7 +1,8 @@
 const CsvDataClient = require('../data/CsvDataClient');
 const AIAgentFactory = require('../ai/AIAgentFactory');
-const GeminiAgent = require('../ai/GeminiAgent');
 const { buildContext } = require('../bot/SignalBuilder');
+const { evaluateRule } = require('../strategy/RuleEngine');
+const { checkNoiseFilters, updateAfterClose, createFilterState } = require('../strategy/NoiseFilter');
 const { calculateSMA, calculateEMA, getCrossSignal } = require('../indicators/MA');
 const { calculate: calculateRSI, getZone: getRSIZone } = require('../indicators/RSI');
 const { calculate: calculateATR } = require('../indicators/ATR');
@@ -99,9 +100,7 @@ class BacktestEngine {
     let aiCallCount = 0;
 
     // Tracking state for noise filters
-    const dailyTradesCount = new Map(); // 'YYYY-MM-DD' -> count
-    let consecutiveLosses = 0;
-    let lastLossTime = null;
+    const filterState = createFilterState();
 
     // Map: logEntry index -> logEntry object, so we can enrich it when the trade closes
     const pendingTradeLogIdx = new Map(); // tradeIndex (trades.length at open time) -> logs index
@@ -295,13 +294,7 @@ class BacktestEngine {
           currentBalance += profit;
 
           // Update consecutive loss state for cooldown filter
-          if (profit < 0) {
-            consecutiveLosses++;
-            lastLossTime = currentCandleMs;
-          } else {
-            consecutiveLosses = 0;
-            lastLossTime = null;
-          }
+          updateAfterClose(filterState, profit, currentCandleMs, candleDateStr, config);
 
           openPosition = null;
         }
@@ -437,31 +430,9 @@ class BacktestEngine {
       }
 
       // 3. Apply Noise Filters (Max trades/day & Consecutive loss cooldown)
-      let filterBlocked = false;
-      let filterReason = '';
-
-      const todayTrades = dailyTradesCount.get(candleDateStr) || 0;
-      if (todayTrades >= maxTradesPerDay) {
-        filterBlocked = true;
-        filterReason = `Max daily trades reached (${todayTrades}/${maxTradesPerDay})`;
-      }
-
-      if (
-        !filterBlocked &&
-        consecutiveLosses >= 2 &&
-        lastLossTime &&
-        currentCandleMs - lastLossTime < cooldownHours * 60 * 60 * 1000
-      ) {
-        filterBlocked = true;
-        filterReason = `Cooldown active after ${consecutiveLosses} consecutive losses (${cooldownHours}h)`;
-      } else if (
-        lastLossTime &&
-        currentCandleMs - lastLossTime >= cooldownHours * 60 * 60 * 1000
-      ) {
-        // Cooldown expired
-        consecutiveLosses = 0;
-        lastLossTime = null;
-      }
+      const filterResult = checkNoiseFilters(filterState, candleDateStr, currentCandleMs, config);
+      const filterBlocked = filterResult.blocked;
+      const filterReason = filterResult.reason;
 
       // 4. Determine decision based on mode
       let decision;
@@ -474,13 +445,7 @@ class BacktestEngine {
           reason: `Filter: ${filterReason}`
         };
       } else {
-        const ruleBasedDecision = this._evaluateRuleBasedDecision(
-          context,
-          config,
-          h1Trend,
-          defaultSlAtrMultiplier,
-          defaultTpAtrMultiplier
-        );
+        const ruleBasedDecision = evaluateRule(context, config);
 
         if (mode === 'rule-based') {
           decision = ruleBasedDecision;
@@ -603,7 +568,8 @@ class BacktestEngine {
               }
 
               executedOrder = { sl, tp, units, ruleSl, ruleTp, entryPrice: currentPrice, candleIdx: i };
-              dailyTradesCount.set(candleDateStr, todayTrades + 1);
+              const todayTrades = filterState.dailyTradesCount.get(candleDateStr) || 0;
+              filterState.dailyTradesCount.set(candleDateStr, todayTrades + 1);
             }
           }
         }
@@ -698,191 +664,7 @@ class BacktestEngine {
     };
   }
 
-  /**
-   * Rule-based decision evaluation for Multi-Timeframe EMA + RSI + ADX strategy.
-   *
-   * @private
-   * @param {Object} context
-   * @param {Object} config
-   * @param {string} h1Trend
-   * @param {number} defaultSlAtrMultiplier
-   * @param {number} defaultTpAtrMultiplier
-   * @returns {Object}
-   */
-  _evaluateRuleBasedDecision(
-    context,
-    config,
-    h1Trend,
-    defaultSlAtrMultiplier,
-    defaultTpAtrMultiplier
-  ) {
-    const { indicators } = context;
-    const rsi = indicators.rsi;
-    const adx = indicators.adx ?? 25;
-    const maCross = indicators.ma_cross;
 
-    const adxThreshold = config.ADX_THRESHOLD || 20;
-    const rsiBuyMin = config.RSI_BUY_MIN || 40;
-    const rsiBuyMax = config.RSI_BUY_MAX || 65;
-    const rsiSellMin = config.RSI_SELL_MIN || 35;
-    const rsiSellMax = config.RSI_SELL_MAX || 60;
-
-    // Precondition: ADX > threshold
-    const isTrending = adx > adxThreshold;
-    if (!isTrending) {
-      return {
-        action: 'skip',
-        confidence: 0.0,
-        sl_atr_multiplier: defaultSlAtrMultiplier,
-        tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `ADX (${adx}) <= threshold (${adxThreshold}) - market is sideway`
-      };
-    }
-
-    // BUY Rule (chien-luoc-ema-rsi-m5-bot.md §3)
-    // BUY Rule:
-    // 1. H1 Uptrend
-    // 2. M5 Fresh Cross (bullish_cross)
-    // 3. RSI in sweet-spot [45, 68]
-    // 4. ADX > 20
-    // 5. Candle confirmation & not overextended from EMA21
-    // 6. No extreme spike candle
-    const isH1Uptrend = h1Trend === 'uptrend';
-    const candleBody = indicators.candle_body;
-    const wickRejection = indicators.candle_wick_rejection;
-    const distanceToMa21Atr = indicators.distance_to_ma21_atr || 0;
-    const bodyToAtrRatio = indicators.body_to_atr_ratio || 0;
-    const isBullishCandle = candleBody === 'bullish' || wickRejection === 'bottom_wick';
-    const notOverextended = distanceToMa21Atr <= 1.2;
-    const notSpike = bodyToAtrRatio <= 2.2;
-
-    if (
-      isH1Uptrend &&
-      maCross === 'bullish_cross' &&
-      rsi >= rsiBuyMin &&
-      rsi <= rsiBuyMax &&
-      isBullishCandle &&
-      notOverextended
-    ) {
-      const dynamic = this._calculateDynamicSlTp('buy', context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier);
-      return {
-        action: 'buy',
-        confidence: 1.0,
-        sl_atr_multiplier: dynamic.slMultiplier,
-        tp_atr_multiplier: dynamic.tpMultiplier,
-        reason: `Rule-based BUY: H1 Uptrend, EMA Cross, RSI (${rsi}) in [${rsiBuyMin}, ${rsiBuyMax}], ADX (${adx}) > ${adxThreshold} (RR: 1:${dynamic.rrRatio})`
-      };
-    }
-
-    // SELL Rule:
-    // 1. H1 Downtrend
-    // 2. M5 Fresh Cross (bearish_cross)
-    // 3. RSI in sweet-spot [35, 60]
-    // 4. ADX > 20
-    // 5. Candle confirmation & not overextended from EMA21
-    const isH1Downtrend = h1Trend === 'downtrend';
-    const isBearishCandle = candleBody === 'bearish' || wickRejection === 'top_wick';
-
-    if (
-      isH1Downtrend &&
-      maCross === 'bearish_cross' &&
-      rsi >= rsiSellMin &&
-      rsi <= rsiSellMax &&
-      isBearishCandle &&
-      notOverextended
-    ) {
-      const dynamic = this._calculateDynamicSlTp('sell', context, config, defaultSlAtrMultiplier, defaultTpAtrMultiplier);
-      return {
-        action: 'sell',
-        confidence: 1.0,
-        sl_atr_multiplier: dynamic.slMultiplier,
-        tp_atr_multiplier: dynamic.tpMultiplier,
-        reason: `Rule-based SELL: H1 Downtrend, EMA Cross, RSI (${rsi}) in [${rsiSellMin}, ${rsiSellMax}], ADX (${adx}) > ${adxThreshold} (RR: 1:${dynamic.rrRatio})`
-      };
-    }
-
-    // Fallback: If conditions are not satisfied under MTF
-    // Check if traditional oversold / overbought cross is met for backwards compatibility when RSI is extreme
-    if (rsi < (config.RSI_OVERSOLD || 30) && maCross === 'bullish_cross') {
-      return {
-        action: 'buy',
-        confidence: 1.0,
-        sl_atr_multiplier: defaultSlAtrMultiplier,
-        tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based BUY: Oversold rebound RSI (${rsi}) and bullish EMA cross`
-      };
-    }
-
-    if (rsi > (config.RSI_OVERBOUGHT || 70) && maCross === 'bearish_cross') {
-      return {
-        action: 'sell',
-        confidence: 1.0,
-        sl_atr_multiplier: defaultSlAtrMultiplier,
-        tp_atr_multiplier: defaultTpAtrMultiplier,
-        reason: `Rule-based SELL: Overbought reversal RSI (${rsi}) and bearish EMA cross`
-      };
-    }
-
-    return {
-      action: 'skip',
-      confidence: 0.0,
-      sl_atr_multiplier: defaultSlAtrMultiplier,
-      tp_atr_multiplier: defaultTpAtrMultiplier,
-      reason: 'Rule-based: Setup condition not met'
-    };
-  }
-
-  /**
-   * Calculates dynamic SL and TP based on market structure (Swing High/Low) and ADX momentum.
-   * @private
-   */
-  _calculateDynamicSlTp(side, context, config, defaultSl, defaultTp) {
-    const currentPrice = context.currentPrice;
-    const atr = context.indicators.atr || 1.0;
-    const adx = context.indicators.adx || 20;
-    const swingHigh = context.indicators.local_swing_high || context.indicators.recent_swing_high || currentPrice;
-    const swingLow = context.indicators.local_swing_low || context.indicators.recent_swing_low || currentPrice;
-    const bufferAtr = config.SL_ATR_BUFFER ?? 0.15;
-    const minSlAtr = config.MIN_SL_ATR ?? 0.85;
-    const maxSlAtr = config.MAX_SL_ATR ?? 1.15;
-
-    let slDistance;
-    if (side === 'buy') {
-      const swingDist = currentPrice - swingLow;
-      const rawSl = swingDist > 0 ? (swingDist + bufferAtr * atr) : (defaultSl * atr);
-      slDistance = Math.min(Math.max(rawSl, minSlAtr * atr), maxSlAtr * atr);
-    } else {
-      const swingDist = swingHigh - currentPrice;
-      const rawSl = swingDist > 0 ? (swingDist + bufferAtr * atr) : (defaultSl * atr);
-      slDistance = Math.min(Math.max(rawSl, minSlAtr * atr), maxSlAtr * atr);
-    }
-
-    // Dynamic R:R ratio targeting high win-rate with positive expectancy
-    let rrRatio = 1.50;
-    if (adx >= 35) {
-      rrRatio = 2.00;
-    } else if (adx >= 25) {
-      rrRatio = 1.75;
-    }
-
-    let tpDistance = slDistance * rrRatio;
-    
-    // Ensure strict minimum R:R of 1:1
-    if (tpDistance < slDistance) {
-      tpDistance = slDistance;
-    }
-
-    const slMultiplier = Number((slDistance / atr).toFixed(2));
-    const tpMultiplier = Number((tpDistance / atr).toFixed(2));
-
-    return {
-      slDistance: Number(slDistance.toFixed(2)),
-      tpDistance: Number(tpDistance.toFixed(2)),
-      slMultiplier,
-      tpMultiplier,
-      rrRatio
-    };
-  }
 }
 
 module.exports = BacktestEngine;
