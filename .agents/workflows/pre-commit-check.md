@@ -36,6 +36,9 @@ Check each item below and report **PASS / FAIL / N/A** for each:
 - [ ] **No hardcoded strategy params**: MA period, RSI threshold, ATR multiplier not hardcoded in code — reference `STRATEGY.md` and read via config.
 - [ ] **Correct file location**: Newly created files are in the correct location by layer according to `ARCHITECTURE.md`.
 - [ ] **Naming convention**: PascalCase for files, camelCase for functions/variables.
+- [ ] **No rule logic in TradingBot/BacktestEngine**: BUY/SELL conditions and SL/TP calculation must be in `src/strategy/`, not inline in TradingBot or BacktestEngine.
+- [ ] **No route handlers in serve.js**: New API routes must be added to the appropriate `routes/*.routes.js` file, not directly to `serve.js`.
+- [ ] **No circular deps in strategy layer**: `src/strategy/*.js` must not import from `src/bot/` or `src/backtest/`.
 
 #### ⚠️ Safety Rules (Trading-specific)
 - [ ] **No blind trades**: All code paths leading to `createOrder` go through validation (confidence check, JSON parse check).

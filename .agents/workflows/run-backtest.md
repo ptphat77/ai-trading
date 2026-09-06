@@ -24,6 +24,7 @@ When the user asks to run a backtest, test a strategy, or evaluate strategy resu
    - Note baseline parameters: MA period, RSI threshold, ATR multiplier, confidence threshold
    - Note the **baseline backtest results** (if present in the changelog)
 2. Verify `src/config.js` and `.env` are loading the correct current strategy parameters.
+   Note: Rule logic is in `src/strategy/RuleEngine.js` — changes there affect both Live and Backtest simultaneously.
 
 ### Step 2: 🎛️ Choose Backtest Mode
 Ask the user (or infer from context):

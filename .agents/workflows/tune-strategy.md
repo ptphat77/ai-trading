@@ -41,7 +41,10 @@ When the user wants to change strategy parameters: MA period, RSI threshold, ATR
 > Only code changes in `src/` are allowed here to try out variations.
 
 #### 3a. Apply parameter changes to code (NO commit, NO STRATEGY.md update yet)
-- Update `src/config.js` and any affected modules (e.g., `BacktestEngine.js`, `SignalBuilder.js`).
+- Update `src/config.js` — this is the primary place for parameter changes.
+- If changing rule thresholds or conditions: update `src/strategy/RuleEngine.js`.
+- If changing SL/TP logic: update `src/strategy/SlTpCalculator.js`.
+- Do NOT edit `TradingBot.js` or `BacktestEngine.js` for strategy param changes — they only consume from `src/strategy/`.
 
 #### 3b. Run Backtest
 ```bash

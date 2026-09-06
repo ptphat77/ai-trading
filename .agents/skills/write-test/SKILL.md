@@ -29,14 +29,19 @@ When the user asks to write a test, add a test, or verify the behavior of a modu
    | Module | Test type | Approach |
    |--------|-----------|----------|
    | `src/indicators/*.js` | Pure function test | Real input → assert output |
+   | `src/strategy/RuleEngine.js` | Pure function test | Context fixture → assert action/reason |
+   | `src/strategy/SlTpCalculator.js` | Pure function test | Context + config → assert sl/tp multipliers |
+   | `src/strategy/NoiseFilter.js` | State machine test | State mutations → assert blocked/unblocked |
    | `src/ai/GeminiAgent.js` | Mock API test | Mock Gemini response → assert decision + fallback |
+   | `src/ai/QwenAgent.js` | Mock API test | Mock axios → assert decision + fallback (same patterns as GeminiAgent) |
    | `src/bot/RiskManager.js` | Pure calculation test | Known inputs → assert units |
    | `src/bot/SignalBuilder.js` | Integration-lite | Mock candles + indicators → assert context |
-   | `src/bot/TradingBot.js` | Integration test | Mock BrokerClient + GeminiAgent → assert flow |
+   | `src/bot/TradingBot.js` | Integration test | Mock dependencies → assert flow |
    | `src/data/BrokerClient.js` | Mock HTTP test | Mock axios → assert request format + error handling |
    | `src/data/CsvDataClient.js` | File read test | Mock fs/CSV parsing → assert Candle[] output |
    | `src/backtest/BacktestEngine.js` | Simulation test | Feed candle fixture → assert trade log |
    | `src/backtest/ReportGenerator.js` | Calculation test | Mock trade log → assert metrics |
+   | `scripts/chart_viewer/helpers/*.js` | Unit test | Input/output assertion, no HTTP mocking needed |
 
 3. Read `@docs/data/DATA-SCHEMA.md` to get schemas for test fixtures.
 
@@ -60,6 +65,19 @@ Tests must cover all safety paths from `API-CONTRACTS.md §2.3`:
 - ❌ `confidence` out of bounds [0,1] → action = `skip`
 - ❌ API timeout / throw error → action = `skip`, do not throw outside
 - ❌ Invalid `action` (e.g., `"hold"`) → action = `skip`
+
+#### Strategy Tests (Layer 3.5) — **CRITICAL for Live/Backtest parity**
+
+`RuleEngine.test.js` must cover:
+- BUY signal: all conditions satisfied → `action: 'buy'`
+- SELL signal: all conditions satisfied → `action: 'sell'`
+- ADX precondition: ADX ≤ threshold → `action: 'skip'`
+- H1 trend mismatch: uptrend + bearish_cross → `action: 'skip'`
+- RSI out of zone → `action: 'skip'`
+- Candle body mismatch → `action: 'skip'`
+- Overextended from EMA21 → `action: 'skip'`
+- Oversold fallback: RSI < OVERSOLD + bullish_cross → `action: 'buy'`
+- Overbought fallback: RSI > OVERBOUGHT + bearish_cross → `action: 'sell'`
 
 #### RiskManager Tests (Layer 4)
 - Assert unit calculation formula against known values.

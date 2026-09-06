@@ -17,7 +17,16 @@ Apply all coding conventions, layer responsibilities, naming rules, and architec
 
 ### When making architectural decisions
 → Read `@docs/ARCHITECTURE.md` first.
-Understand the layer-based folder structure, module boundaries (Data / Indicator / AI / Bot / Backtest / Utils), and design principles before proposing solutions.
+Understand the layer-based folder structure, module boundaries (Data / Indicator / AI / Strategy / Bot / Backtest / Utils / Chart), and design principles before proposing solutions.
+
+### When working with strategy rule logic (BUY/SELL conditions, SL/TP calculation, noise filters)
+→ Read `@docs/ARCHITECTURE.md` §Layer 3.5 + `@docs/STRATEGY.md`.
+All rule evaluation must go through `src/strategy/RuleEngine.js`. Do not add rule logic directly to TradingBot or BacktestEngine.
+
+### When working with chart_viewer (serve.js, routes, helpers, index.html)
+→ Read `@docs/ARCHITECTURE.md` §Chart section.
+Live-only features go in `routes/live.routes.js`. Backtest-only features go in `routes/backtest.routes.js`.
+Shared utilities go in `helpers/`. Do not add route handlers directly to `serve.js`.
 
 ### When working with indicators, bot logic, or backtests
 → Read `@docs/ARCHITECTURE.md` + `@docs/STRATEGY.md`.
@@ -76,3 +85,6 @@ Record the current version and baseline backtest. All parameter changes must upd
 - **Never open a new position while one is already open** on the same symbol.
 - **Never write business logic inside `BrokerClient.js`.** This module only calls the API and returns raw data.
 - **Never implement out-of-scope features.** Check `PRD.md §4` before building anything new.
+- **Never add rule logic directly to `TradingBot.js` or `BacktestEngine.js`.** All Tier 1 strategy rules must live in `src/strategy/RuleEngine.js` and be called from there.
+- **Never add route handlers directly to `serve.js`.** Live routes → `routes/live.routes.js`, Backtest routes → `routes/backtest.routes.js`, Shared → `routes/shared.routes.js`.
+- **Never duplicate indicator context building.** `BacktestEngine` calculates indicators pre-loop for performance; `TradingBot` uses `SignalBuilder.buildContext()`. Both are correct for their context. Do not introduce a third approach.
