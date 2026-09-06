@@ -10,15 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and adhe
 
 ## [Unreleased]
 
-### Planned
-- Setup project structure, `MT5Client`, test fetching candles
-- Indicators: MA, RSI, ATR
-- `GeminiAgent` + prompt engineering
-- Main `TradingBot` logic
-- `BacktestEngine` + `ReportGenerator`
-- Overall testing + debugging
-
 ---
+
+## [Refactor] — 2026-09-06
+
+### Architecture Changes
+- Added `src/strategy/` layer: `RuleEngine.js`, `SlTpCalculator.js`, `NoiseFilter.js`
+- Both `TradingBot` and `BacktestEngine` now use shared `RuleEngine.evaluateRule()`
+- Chart server modularized: `serve.js` → `routes/` + `helpers/` structure
+- `logger.js` now writes JSONL to `logs/trade_log.jsonl`
+
+### Bug Fixes
+- Fixed: `BrokerClient.js` importing `axios` inside method
+- Fixed: `SignalBuilder.js` duplicate `ma9`/`ma21` keys
+- Fixed: `config.js` `STRATEGY_VERSION` default out of sync with `STRATEGY.md`
+
+### Technical Debt
+- Removed: dead import `GeminiAgent` in `BacktestEngine`
+- Removed: `geminiAgent` backward compat alias in `BacktestEngine`
+- Removed: positional arg fallback in `notifier.sendSignalAlert()`
+- Added: full unit tests for `TradingBot`, `RuleEngine`, `SlTpCalculator`
 
 ## [0.1.0] — 2026-08-29
 

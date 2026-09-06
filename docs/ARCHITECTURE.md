@@ -1,7 +1,7 @@
 # ARCHITECTURE.md — TradeBot_XAU
 
-**Version**: v2.0
-**Date**: 2026-09-01
+**Version**: v3.0  
+**Date**: 2026-09-06
 
 ---
 
@@ -32,13 +32,14 @@ TradeBot_XAU/
 │   ├── config.js                ← Load .env, export global config
 │   │
 │   ├── data/
-│   │   ├── BrokerClient.js    ← Wrapper to call Broker REST API (Phase 3 & 4: Paper/Live)
-│   │   └── CsvDataClient.js    ← Read local candle CSV file (Phase 1 & 2: Test/Backtest)
+│   │   ├── BrokerClient.js      ← Wrapper to call Broker REST API (Phase 3 & 4: Paper/Live)
+│   │   └── CsvDataClient.js     ← Read local candle CSV file (Phase 1 & 2: Test/Backtest)
 │   │
 │   ├── indicators/
 │   │   ├── MA.js                ← SMA/EMA
-│   │   ├── RSI.js                ← RSI + OB/OS zones
-│   │   └── ATR.js                ← ATR (used for dynamic SL)
+│   │   ├── RSI.js               ← RSI + OB/OS zones
+│   │   ├── ATR.js               ← ATR (used for dynamic SL)
+│   │   └── ADX.js               ← ADX (trend strength filter)
 │   │
 │   ├── ai/
 │   │   ├── BaseAIAgent.js       ← Abstract base: shared prompt template, JSON validation, skip fallback
@@ -47,6 +48,11 @@ TradeBot_XAU/
 │   │   ├── GeminiAgent.js       ← Google Gemini — alternative provider
 │   │   └── promptTemplate.js    ← Centralized prompt template (shared by all agents)
 │   │
+│   ├── strategy/                ← [Layer 3.5] Shared Strategy Logic (Live + Backtest)
+│   │   ├── RuleEngine.js        ← Tier 1 rule evaluation (dùng chung Live + Backtest)
+│   │   ├── SlTpCalculator.js    ← Dynamic SL/TP calculation
+│   │   └── NoiseFilter.js       ← Daily trade limit + cooldown filter
+│   │
 │   ├── bot/
 │   │   ├── SignalBuilder.js      ← Aggregate indicators → context for AI agent
 │   │   ├── TradingBot.js         ← Main logic: candles → signal → AI → order
@@ -54,10 +60,13 @@ TradeBot_XAU/
 │   │
 │   ├── backtest/
 │   │   ├── BacktestEngine.js     ← Simulate trading on historical data
-│   │   └── ReportGenerator.js    ← Calculate metrics & export report
+│   │   ├── ReportGenerator.js    ← Calculate metrics & export report
+│   │   └── TradeLogExporter.js   ← Export trade log to CSV/JSON
 │   │
 │   └── utils/
-│       └── logger.js             ← Log to file + console
+│       ├── logger.js             ← Log JSONL to file + console
+│       ├── notifier.js           ← Send signal alerts (Telegram, etc.)
+│       └── resample.js           ← Resample M5 candles to H1
 │
 ├── data/
 │   └── candles.csv             ← source-agnostic historical candle data (for backtest)
@@ -71,8 +80,20 @@ TradeBot_XAU/
 └── scripts/
     ├── run_live.js                ← Entry point: run real/demo bot
     ├── run_backtest.js            ← Entry point: run backtest
-    ├── mt5_bridge/                ← Python FastAPI connecting to local MT5
-    └── chart_viewer/              ← Web dashboard (Node.js server + HTML/JS UI)
+    │
+    ├── chart_viewer/              ← Web dashboard (Node.js server + HTML/JS UI)
+    │   ├── index.html             ← Refactored: JS organised by Live/Backtest sections
+    │   ├── serve.js               ← Slim bootstrap (~50 lines) — registers routes
+    │   ├── routes/
+    │   │   ├── shared.routes.js   ← /api/candles, /api/config, /api/status
+    │   │   ├── live.routes.js     ← /api/live, /api/stream, /api/price, /api/positions
+    │   │   └── backtest.routes.js ← /api/signals, /api/backtest, /api/trades, /api/ai-advice
+    │   └── helpers/
+    │       ├── bridgeClient.js    ← fetchBridgeJson(), BRIDGE_URL management
+    │       ├── csvParser.js       ← readCsvFile(), parseCsvToCandles()
+    │       └── sanitize.js        ← sanitizePositions(), sanitizeHealth()
+    │
+    └── mt5_bridge/                ← Python FastAPI connecting to local MT5
 ```
 
 ## 3. Layered Architecture
@@ -127,6 +148,26 @@ Mandatory safety principles (detailed in `PROJECT-RULES.md`):
 
 Input/output schema: see `DATA-SCHEMA.md`. Prompt template and response contracts: see `API-CONTRACTS.md` and `STRATEGY.md`.
 
+### Layer 3.5 — Strategy Layer (`src/strategy/`) ⭐ Shared
+
+Shared strategy logic used by both `TradingBot` (Live) and `BacktestEngine` (Backtest).
+Having a single implementation ensures Live and Backtest always run the same strategy.
+
+- **RuleEngine.js**: `evaluateRule(context, config)` → `{ action, confidence, sl_atr_multiplier, tp_atr_multiplier, reason }`
+  - Tier 1 hard filters: ADX threshold, H1 trend alignment, M5 EMA cross, RSI zone, candle confirmation, distance to EMA21
+  - Calls `SlTpCalculator.calculateDynamicSlTp()` for SL/TP multipliers
+- **SlTpCalculator.js**: `calculateDynamicSlTp(side, context, config, defaultSl, defaultTp)`
+  - SL: behind local swing pivot + ATR buffer, bounded [MIN_SL_ATR, MAX_SL_ATR]
+  - TP: scaled by ADX momentum (ADX≥35 → 2.0x, ADX≥25 → 1.75x, default → 1.50x)
+  - `calculateFixedSlTp(side, entryPrice, atr, slMultiplier, tpMultiplier)` — simple fallback
+- **NoiseFilter.js**: Trade frequency control
+  - `checkNoiseFilters(state, candleDateStr, currentCandleMs, config)` → `{ blocked, reason }`
+  - `updateAfterClose(state, profit, closeTimeMs, config)` — update state after trade closes
+  - `createFilterState()` — factory for initial filter state
+
+**Key constraint**: `src/strategy/` modules must NOT import from `src/bot/` or `src/backtest/`.
+They may import from `src/indicators/` and `src/config.js` only.
+
 ### Layer 4 — Bot Logic (`src/bot/`)
 
 - **SignalBuilder.js**: aggregates all indicators into 1 context object to send to the AI agent.
@@ -135,7 +176,7 @@ Input/output schema: see `DATA-SCHEMA.md`. Prompt template and response contract
   1. Fetch latest M5 candles (+ H1 candles for MTF trend filter)
   2. Calculate EMA9/21 (M5), EMA50/200 (H1), RSI9, ADX14, ATR14
   3. Check open positions → if exists, skip
-  4. **Tier 1 (Strategy Hard Filters)**: Check H1 Trend + M5 EMA Cross + RSI Zone + ADX > 20. If not satisfied, skip immediately (0 API calls).
+  4. **Tier 1 (Strategy Hard Filters)**: Delegates to `RuleEngine.evaluateRule()` from `src/strategy/`. If not satisfied, skip immediately (0 API calls).
   5. **Tier 2 (AI Decision Layer)**: If Tier 1 triggers a candidate Buy/Sell signal, send context to AI Agent (via `AIAgentFactory.createAgent()`) to validate candle structure, filter chop/wicks, and refine SL/TP.
   6. Receive AI decision: if confidence reaches threshold, calculate SL/TP by ATR, calculate units via RiskManager, place order.
   7. Log fully (including skip).
@@ -143,14 +184,17 @@ Input/output schema: see `DATA-SCHEMA.md`. Prompt template and response contract
 ### Layer 5 — Backtest Engine (`src/backtest/`)
 
 - **BacktestEngine.js**: simulation on historical candle data loaded from `CsvDataClient`, 2 modes:
-  - *Rule-based*: uses hard rules (EMA cross + RSI + ADX threshold) for fast testing, consumes no AI quota.
+  - *Rule-based*: delegates to `RuleEngine.evaluateRule()` from `src/strategy/` for fast testing, consumes no AI quota.
   - *AI-simulated*: calls AI agent **only on valid Rule-Based Strategy signals** to validate prompt quality without wasting quota on invalid crosses.
   - Data source: `CsvDataClient.getCandles()` — iterates through the CSV window-by-window to simulate real-time candle flow.
 - **ReportGenerator.js**: calculates Win Rate, Profit Factor, Net Profit, Max Drawdown, Sharpe Ratio; exports `backtest_result.json` + prints to console.
 
-### Layer 6 — Utils (`src/utils/logger.js`)
+### Layer 6 — Utils (`src/utils/`)
 
-Consistent logging to both file and console, shared across all layers.
+Shared utilities across all layers:
+- **logger.js**: writes structured JSONL entries to `logs/trade_log.jsonl` and console.
+- **notifier.js**: `sendSignalAlert(signal)` — sends formatted alerts (Telegram, etc.).
+- **resample.js**: `resampleToH1(m5Candles)` — aggregates M5 candles into H1 for trend filter.
 
 ## 4. Overall Workflow
 
@@ -177,6 +221,8 @@ flowchart TD
 - **Each module independent, easy to test separately**: indicators are pure functions; `BrokerClient` and AI agents can be mocked when testing `TradingBot`.
 - **Backtest does not depend on real AI API calls** unless actively enabling AI-simulated mode — helps iterate quickly during strategy optimization.
 - **AI provider is hot-swappable**: set `AI_PROVIDER=qwen` or `AI_PROVIDER=gemini` in `.env` — no code changes required. Adding a new provider only requires a new `*Agent.js` file + one line in `AIAgentFactory`.
+- **Strategy is centralized in `src/strategy/`**: Both `TradingBot` and `BacktestEngine` use the same `RuleEngine.evaluateRule()`. Changing rules only requires editing one file — Live and Backtest cannot diverge.
+- **Chart server is modular**: Live-only routes (`/api/live`, `/api/stream`) are isolated from Backtest-only routes (`/api/signals`, `/api/backtest`). Adding live features cannot break backtest views.
 
 ## 6. Verification Plan
 

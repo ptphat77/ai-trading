@@ -1,8 +1,8 @@
 # PRD — XAU/USD AI Trading Bot
 
 **Project**: TradeBot_XAU
-**Document Version**: v2.0
-**Date**: 2026-09-01
+**Document Version**: v3.0  
+**Date**: 2026-09-06
 
 ---
 
@@ -39,6 +39,8 @@ Automated Gold (XAU/USD) trading bot: uses technical indicators (MA, RSI, ADX, A
 - Risk management by fixed account %
 - Real-time MT5 connection (Python FastAPI Bridge) for live streaming OHLCV data and ticks
 - Local Web Monitoring Dashboard (Chart Viewer, Strategy KPIs, Equity Curve, Trade Journal)
+- Strategy module extraction: `src/strategy/` shared between Live and Backtest (internal refactor, no new user-facing features)
+- Chart server modularization: separate Live vs Backtest API routes (internal refactor, no new user-facing features)
 
 ### Out of scope — Phase 1
 - Live trading with real money (only deploy after Demo runs stably for ≥ 1 continuous week — see Phase 4 in Verification Plan, `ARCHITECTURE.md`)

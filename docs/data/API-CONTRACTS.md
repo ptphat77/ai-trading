@@ -1,7 +1,7 @@
 # API-CONTRACTS.md — TradeBot_XAU
 
-**Version**: v2.0
-**Date**: 2026-09-01
+**Version**: v3.0  
+**Date**: 2026-09-06
 
 ---
 
@@ -196,3 +196,52 @@ run(candles: Candle[], mode: 'rule-based'|'ai-simulated'): TradeLogEntry[]
 ```js
 generate(tradeLogs: TradeLogEntry[]): BacktestResult
 ```
+
+---
+
+## 4. Internal Strategy Module Interface (`src/strategy/`)
+
+These modules implement shared strategy logic consumed by both `TradingBot` (Live) and `BacktestEngine` (Backtest).
+
+### 4.1 `RuleEngine.evaluateRule(context, config)`
+
+**Input**: `context` (GeminiContext schema — see `DATA-SCHEMA.md §3`), `config` object from `src/config.js`  
+**Output**:
+```json
+{
+  "action": "buy | sell | skip",
+  "confidence": 1.0,
+  "sl_atr_multiplier": 1.2,
+  "tp_atr_multiplier": 1.8,
+  "reason": "Rule BUY: H1 Uptrend, EMA Cross, RSI(52)∈[40,65], ADX(24)>20 (RR:1:1.75)"
+}
+```
+
+**Callers**: `TradingBot.evaluateCycle()`, `BacktestEngine._runSimulation()`  
+**Constraint**: Must NOT import from `src/bot/` or `src/backtest/`.
+
+### 4.2 `SlTpCalculator.calculateDynamicSlTp(side, context, config, defaultSl, defaultTp)`
+
+**Input**:
+- `side`: `'buy' | 'sell'`
+- `context`: GeminiContext (includes recent candles, ATR, ADX values)
+- `config`: config object
+- `defaultSl`, `defaultTp`: ATR multiplier fallbacks
+
+**Output**: `{ sl_atr_multiplier: number, tp_atr_multiplier: number }`
+
+**Also exports**: `calculateFixedSlTp(side, entryPrice, atr, slMultiplier, tpMultiplier)` — returns `{ sl: number, tp: number }`
+
+### 4.3 `NoiseFilter.checkNoiseFilters(state, candleDateStr, currentCandleMs, config)`
+
+**Input**:
+- `state`: filter state object (created via `NoiseFilter.createFilterState()`)
+- `candleDateStr`: candle date string `'YYYY-MM-DD'`
+- `currentCandleMs`: candle open timestamp in milliseconds
+- `config`: config object
+
+**Output**: `{ blocked: boolean, reason: string | null }`
+
+**Also exports**:
+- `updateAfterClose(state, profit, closeTimeMs, config)` — mutates `state` after a trade closes
+- `createFilterState()` → `{ tradesPerDay: {}, lastCloseMs: null, lastPnl: null }` — factory for fresh state

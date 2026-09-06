@@ -7,3 +7,9 @@ backtest_result.json
 
 # Candle data files — do not commit (can be large, source-specific)
 data/*.csv
+
+# Understand-Anything generated knowledge graph, cache & local skills
+.ua/
+.understand-anything/
+.agents/skills/understand*
+
