@@ -44,8 +44,8 @@ This document defines the data structures (schema) exchanged between components 
 
 ```json
 {
-  "ma9": 2348.20,
-  "ma21": 2345.80,
+  "ma_fast": 2348.20,
+  "ma_slow": 2345.80,
   "rsi": 32.5,
   "atr": 1.85,
   "ma_cross": "bullish_cross"
@@ -63,8 +63,8 @@ This document defines the data structures (schema) exchanged between components 
   "timeframe": "5m",
   "currentPrice": 2350.45,
   "indicators": {
-    "ma9": 2348.20,
-    "ma21": 2345.80,
+    "ma_fast": 2348.20,
+    "ma_slow": 2345.80,
     "rsi": 32.5,
     "atr": 1.85,
     "ma_cross": "bullish_cross"

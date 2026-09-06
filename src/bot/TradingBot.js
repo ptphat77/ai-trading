@@ -39,14 +39,14 @@ class TradingBot {
 
     if (!candles || candles.length < 30) {
       log('warn', 'Số lượng nến không đủ để phân tích chỉ báo.');
-      return { status: 'insufficient_candles' };
+      return { action: 'skip', reason: 'insufficient_candles' };
     }
 
     // 1. Xây dựng Context và tính toán các chỉ báo kỹ thuật
     const context = SignalBuilder.buildContext(candles, config);
     if (!context || !context.indicators) {
       log('warn', 'Không thể khởi tạo context từ dữ liệu nến.');
-      return { status: 'context_failed' };
+      return { action: 'skip', reason: 'context_failed' };
     }
 
     // 2. Đánh giá tín hiệu kỹ thuật (Tier 1: Rule-based)
@@ -146,12 +146,25 @@ class TradingBot {
       }
 
       log('info', `Đặt lệnh ${ruleDecision.action.toUpperCase()} | Units: ${units} | SL: ${sl} | TP: ${tp}`);
-      const orderResult = await this.dataClient.createOrder(
-        ruleDecision.action,
-        units,
-        sl,
-        tp
-      );
+      
+      let orderResult;
+      try {
+        orderResult = await this.dataClient.createOrder(
+          ruleDecision.action,
+          units,
+          sl,
+          tp
+        );
+      } catch (err) {
+        log('error', `Lỗi khi createOrder: ${err.message}`);
+        return {
+          action: ruleDecision.action,
+          ruleDecision,
+          aiDecision,
+          executed: false,
+          error: err.message
+        };
+      }
 
       notifier.sendAlert(`✅ <b>ĐÃ KHỚP LỆNH ${ruleDecision.action.toUpperCase()}</b>\nUnits: ${units}\nPrice: ${currentPrice}\nSL: ${sl} | TP: ${tp}`);
 

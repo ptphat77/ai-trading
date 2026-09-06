@@ -119,8 +119,8 @@ describe('BacktestEngine', () => {
         currentPrice: 2000,
         indicators: {
           h1_trend: 'uptrend',
-          ma9: 2005,
-          ma21: 1995,
+          ma_fast: 2005,
+          ma_slow: 1995,
           ma_cross: 'bullish_cross',
           rsi: 25,
           adx: 25,
@@ -167,8 +167,8 @@ describe('BacktestEngine', () => {
         currentPrice: 2000,
         indicators: {
           h1_trend: 'uptrend',
-          ma9: 2005,
-          ma21: 1995,
+          ma_fast: 2005,
+          ma_slow: 1995,
           ma_cross: 'bullish_cross',
           rsi: 28,
           adx: 25,
@@ -213,8 +213,8 @@ describe('BacktestEngine', () => {
         currentPrice: 2000,
         indicators: {
           h1_trend: 'downtrend',
-          ma9: 1995,
-          ma21: 2005,
+          ma_fast: 1995,
+          ma_slow: 2005,
           ma_cross: 'bearish_cross',
           rsi: 75,
           adx: 25,
@@ -260,8 +260,8 @@ describe('BacktestEngine', () => {
         currentPrice: 2000,
         indicators: {
           h1_trend: 'uptrend',
-          ma9: 2005,
-          ma21: 1995,
+          ma_fast: 2005,
+          ma_slow: 1995,
           ma_cross: 'bullish_cross',
           rsi: 20,
           adx: 25,

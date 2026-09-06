@@ -53,7 +53,19 @@ class BaseAIAgent {
         throw new Error(`Confidence out of bounds: ${decision.confidence}`);
       }
 
-
+      // 4. Validate optional SL/TP ATR multipliers (if provided)
+      if (decision.sl_atr_multiplier !== undefined) {
+        if (typeof decision.sl_atr_multiplier !== 'number' || decision.sl_atr_multiplier <= 0 || decision.sl_atr_multiplier > 5) {
+          log('warn', 'Invalid sl_atr_multiplier from AI, using default', { value: decision.sl_atr_multiplier });
+          decision.sl_atr_multiplier = config.DEFAULT_SL_ATR_MULTIPLIER || 1.2;
+        }
+      }
+      if (decision.tp_atr_multiplier !== undefined) {
+        if (typeof decision.tp_atr_multiplier !== 'number' || decision.tp_atr_multiplier <= 0 || decision.tp_atr_multiplier > 8) {
+          log('warn', 'Invalid tp_atr_multiplier from AI, using default', { value: decision.tp_atr_multiplier });
+          decision.tp_atr_multiplier = config.DEFAULT_TP_ATR_MULTIPLIER || 1.8;
+        }
+      }
 
       // 5. Apply MIN_CONFIDENCE safety fallback
       if (decision.confidence < config.MIN_CONFIDENCE) {

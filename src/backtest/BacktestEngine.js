@@ -31,7 +31,6 @@ class BacktestEngine {
     this.candles = options.candles || null;
     this.dataClient = options.dataClient || new CsvDataClient();
     this.aiAgent = options.aiAgent || options.geminiAgent || AIAgentFactory.createAgent();
-    this.geminiAgent = this.aiAgent; // Backward compatibility alias
   }
 
   /**
@@ -400,8 +399,6 @@ class BacktestEngine {
           indicators: {
             ma_fast: Number(currFast.toFixed(2)),
             ma_slow: Number(currSlow.toFixed(2)),
-            ma9: Number(currFast.toFixed(2)),
-            ma21: Number(currSlow.toFixed(2)),
             rsi: Number(currRsi.toFixed(2)),
             adx: Number(currAdx.toFixed(2)),
             atr: Number(currAtr.toFixed(2)),

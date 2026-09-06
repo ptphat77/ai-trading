@@ -13,6 +13,7 @@ const config = {
   BROKER_API_KEY: process.env.BROKER_API_KEY,
   BROKER_ACCOUNT_ID: process.env.BROKER_ACCOUNT_ID,
   BROKER_BASE_URL: process.env.BROKER_BASE_URL,
+  BRIDGE_URL: process.env.BRIDGE_URL || 'http://127.0.0.1:8000',
 
   // --- AI Provider & Engine ---
   AI_PROVIDER: (process.env.AI_PROVIDER || 'qwen').toLowerCase(), // 'qwen' | 'gemini'
@@ -28,7 +29,7 @@ const config = {
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
 
   // --- Strategy ---
-  STRATEGY_VERSION: process.env.STRATEGY_VERSION || 'v2.3',
+  STRATEGY_VERSION: process.env.STRATEGY_VERSION || 'v2.4.4',
   SYMBOL: process.env.SYMBOL || 'XAU_USD',
   TIMEFRAME: process.env.TIMEFRAME || 'M5',
   CANDLE_COUNT: parseInt(process.env.CANDLE_COUNT, 10) || 300,

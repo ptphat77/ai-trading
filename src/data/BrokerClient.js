@@ -1,3 +1,4 @@
+const axios = require('axios');
 const config = require('../config');
 
 /**
@@ -38,7 +39,6 @@ class BrokerClient {
    * @returns {Promise<Object[]>} Array of Candle objects
    */
   async getCandles(count, granularity = 'M5') {
-    const axios = require('axios');
     try {
       // Connect to the MT5 Python Bridge running locally
       const bridgeUrl = config.BRIDGE_URL || 'http://127.0.0.1:8000';

@@ -129,8 +129,6 @@ function buildContext(candles, config, h1Candles = null) {
     indicators: {
       ma_fast: Number(latestMAFast.toFixed(2)),
       ma_slow: Number(latestMASlow.toFixed(2)),
-      ma9: Number(latestMAFast.toFixed(2)),
-      ma21: Number(latestMASlow.toFixed(2)),
       rsi: Number(latestRSI.toFixed(2)),
       adx: latestADX,
       adx_trending: latestADX > (config.ADX_THRESHOLD || 20),

@@ -43,20 +43,7 @@ async function sendAlert(message) {
  * @param {Object} [options.context] - Market context with indicators
  * @param {Object} [options.calculatedOrder] - Order setup { entryPrice, sl, tp, slDistance, tpDistance }
  */
-function sendSignalAlert(options) {
-  // Support either options object or positional arguments for flexibility
-  let ruleDecision, aiDecision, context, calculatedOrder;
-  if (arguments.length > 1 || (options && options.action && !options.ruleDecision)) {
-    ruleDecision = arguments[0] || {};
-    context = arguments[1] || {};
-    calculatedOrder = arguments[2] || null;
-    aiDecision = ruleDecision.aiDecision || null;
-  } else {
-    ruleDecision = options.ruleDecision || {};
-    aiDecision = options.aiDecision || null;
-    context = options.context || {};
-    calculatedOrder = options.calculatedOrder || null;
-  }
+function sendSignalAlert({ ruleDecision = {}, aiDecision = null, context = {}, calculatedOrder = null }) {
 
   const action = (ruleDecision.action || (aiDecision && aiDecision.action) || 'signal').toUpperCase();
   const icon = action === 'BUY' ? '🟢' : (action === 'SELL' ? '🔴' : '🔔');

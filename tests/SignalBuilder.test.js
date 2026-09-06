@@ -84,8 +84,6 @@ describe('SignalBuilder', () => {
         indicators: {
           ma_fast: 2348.20,
           ma_slow: 2345.80,
-          ma9: 2348.20,
-          ma21: 2345.80,
           rsi: 45.5,
           adx: 25.4,
           adx_trending: true,

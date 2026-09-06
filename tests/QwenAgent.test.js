@@ -24,8 +24,8 @@ describe('QwenAgent', () => {
     timeframe: 'M5',
     currentPrice: 2650.50,
     indicators: {
-      ma9: 2648.20,
-      ma21: 2645.80,
+      ma_fast: 2648.20,
+      ma_slow: 2645.80,
       rsi: 52.5,
       adx: 24.5,
       atr: 2.10,
