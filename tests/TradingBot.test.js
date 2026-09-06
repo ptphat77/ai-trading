@@ -140,13 +140,7 @@ describe('TradingBot.evaluateCycle()', () => {
   });
 
   describe('BOT_MODE: auto_trade', () => {
-    it('should skip if open position exists', async () => {
-      mockDataClient.getOpenPositions.mockResolvedValue([{ id: 'pos_1' }]);
-      const res = await bot.evaluateCycle();
-      expect(res.action).toBe('skip');
-      expect(res.reason).toBe('position_already_open');
-      expect(mockDataClient.createOrder).not.toHaveBeenCalled();
-    });
+
 
     it('should skip if units = 0 (RiskManager returns 0)', async () => {
       RiskManager.calculateUnits.mockReturnValue(0);

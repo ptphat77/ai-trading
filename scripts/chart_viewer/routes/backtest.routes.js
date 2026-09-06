@@ -221,28 +221,30 @@ function register(router) {
       const result = await engine.runRuleBased();
 
       const allTrades = [...(result.trades || [])];
-      if (result.openPosition) {
-        // Enrich with AI data if the origin log exists, so UI shows the AI tooltip
-        let aiData = null;
-        if (result.openPosition.logIdx !== undefined && result.logs && result.logs[result.openPosition.logIdx]) {
-          aiData = result.logs[result.openPosition.logIdx].gemini_raw_response;
-        }
+      if (result.openPositions && result.openPositions.length > 0) {
+        for (const openPos of result.openPositions) {
+          // Enrich with AI data if the origin log exists, so UI shows the AI tooltip
+          let aiData = null;
+          if (openPos.logIdx !== undefined && result.logs && result.logs[openPos.logIdx]) {
+            aiData = result.logs[openPos.logIdx].gemini_raw_response;
+          }
 
-        allTrades.push({
-          id: `trade_${allTrades.length + 1}`,
-          symbol: result.openPosition.symbol,
-          side: result.openPosition.side,
-          entryTime: result.openPosition.entryTime,
-          entryPrice: result.openPosition.entryPrice,
-          exitTime: null,
-          exitPrice: null,
-          exitReason: null,
-          sl: result.openPosition.sl,
-          tp: result.openPosition.tp,
-          units: result.openPosition.units,
-          outcome: 'open',
-          ai: aiData
-        });
+          allTrades.push({
+            id: `trade_${allTrades.length + 1}`,
+            symbol: openPos.symbol,
+            side: openPos.side,
+            entryTime: openPos.entryTime,
+            entryPrice: openPos.entryPrice,
+            exitTime: null,
+            exitPrice: null,
+            exitReason: null,
+            sl: openPos.sl,
+            tp: openPos.tp,
+            units: openPos.units,
+            outcome: 'open',
+            ai: aiData
+          });
+        }
       }
 
       // Transform result trades into signals array

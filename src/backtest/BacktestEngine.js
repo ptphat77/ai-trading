@@ -93,7 +93,7 @@ class BacktestEngine {
     }
 
     let currentBalance = initialBalance;
-    let openPosition = null;
+    let openPositions = [];
     const trades = [];
     const logs = [];
     let aiCallCount = 0;
@@ -184,8 +184,9 @@ class BacktestEngine {
         maCross = getCrossSignal(prevFast, currFast, prevSlow, currSlow);
       }
 
-      // 1. Check open position against current candle price extremes & early exit
-      if (openPosition) {
+      // 1. Check open positions against current candle price extremes & early exit
+      let activePositions = [];
+      for (let openPosition of openPositions) {
         let exitPrice = null;
         let exitReason = null;
 
@@ -284,9 +285,6 @@ class BacktestEngine {
             logs[originLogIdx].aiExitPrice = exitPrice;
             logs[originLogIdx].aiExitReason = exitReason;
             logs[originLogIdx].tradeId = tradeRecord.id;
-            // NOTE: ruleBasedOutcome is NOT set here — it must be simulated separately
-            // by TradeLogExporter using logEntry.ruleSl / logEntry.ruleTp + forward candles
-            // because AI multipliers differ from rule default multipliers.
           }
 
           trades.push(tradeRecord);
@@ -294,23 +292,19 @@ class BacktestEngine {
 
           // Update consecutive loss state for cooldown filter
           updateAfterClose(filterState, profit, currentCandleMs, candleDateStr, config);
-
-          openPosition = null;
+        } else {
+          activePositions.push(openPosition);
         }
       }
+      openPositions = activePositions;
 
-      // If position is still open, do not open a new one (PROJECT-RULES.md §1.5)
-      if (openPosition) {
-        continue;
-      }
-
-      // If max AI calls reached and no open position, terminate simulation
-      if (mode === 'ai-simulated' && maxAiCalls > 0 && aiCallCount >= maxAiCalls) {
+      // If max AI calls reached and no open positions, terminate simulation
+      if (mode === 'ai-simulated' && maxAiCalls > 0 && aiCallCount >= maxAiCalls && openPositions.length === 0) {
         break;
       }
 
-      // If max AI accepted trades reached and no open position, terminate simulation
-      if (mode === 'ai-simulated' && maxAiAccepted > 0 && trades.length >= maxAiAccepted) {
+      // If max AI accepted trades reached and no open positions, terminate simulation
+      if (mode === 'ai-simulated' && maxAiAccepted > 0 && trades.length >= maxAiAccepted && openPositions.length === 0) {
         break;
       }
 
@@ -539,7 +533,7 @@ class BacktestEngine {
             const units = calculateUnits(currentBalance, config.RISK_PER_TRADE, slDistance);
 
             if (units > 0) {
-              openPosition = {
+              const newPosition = {
                 symbol: config.SYMBOL,
                 side: decision.action,
                 entryPrice: currentPrice,
@@ -551,6 +545,7 @@ class BacktestEngine {
                 tpDistance, // Track tpDistance for breakeven logic
                 logIdx: logs.length  // will point to the logEntry we're about to push
               };
+              openPositions.push(newPosition);
 
               // Compute rule-based SL/TP separately (using default config multipliers, not AI multipliers)
               const ruleSlDistance = Number((defaultSlAtrMultiplier * atr).toFixed(2));
@@ -643,9 +638,9 @@ class BacktestEngine {
       logs.push(logEntry);
 
       // After pushing, update pendingTradeLogIdx to use the actual pushed index
-      // (openPosition.logIdx was set to logs.length BEFORE push, so it matches)
-      if (mode === 'ai-simulated' && logEntry.aiAccepted && executedOrder && openPosition) {
-        pendingTradeLogIdx.set(openPosition.logIdx, logs.length - 1);
+      if (mode === 'ai-simulated' && logEntry.aiAccepted && executedOrder && openPositions.length > 0) {
+        const lastPos = openPositions[openPositions.length - 1];
+        pendingTradeLogIdx.set(lastPos.logIdx, logs.length - 1);
       }
     }
 
@@ -654,7 +649,7 @@ class BacktestEngine {
       initialBalance,
       finalBalance: Number(currentBalance.toFixed(2)),
       trades,
-      openPosition, // Expose open position to the frontend
+      openPositions, // Expose open positions to the frontend
       logs,
       candlesCount: candles.length,
       allCandles: candles  // exposed for TradeLogExporter forward simulation

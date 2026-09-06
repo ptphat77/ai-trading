@@ -19,9 +19,9 @@ This document finalizes the mandatory rules that must be followed throughout the
 
 3. **Do not switch to Live Trading** until Demo (Paper Trading) runs stably continuously for **≥ 1 week**, with no critical errors (crashes, wrong SL/TP placed, exceeding allowed risk).
 
-4. **RiskManager must strictly enforce** risk limit per trade (`RISK_PER_TRADE`, default 1%). No code path is allowed to bypass this risk calculation step to place an order directly.
+4. **RiskManager must strictly enforce** risk limit per trade (`RISK_PER_TRADE`, default 1%). No code path is allowed to bypass this risk calculation step to place an order directly. Stop Loss and Take Profit levels **must** be calculated using ATR.
 
-5. When a position is open, the bot **must not** open a new position on the same symbol until the old position is closed.
+5. Multiple concurrent positions (Hedging) are allowed on the same symbol.
 
 ## 2. Security
 

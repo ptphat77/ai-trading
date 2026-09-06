@@ -129,12 +129,7 @@ class TradingBot {
         };
       }
 
-      // Kiểm tra vị thế đang mở
-      const openPositions = await this.dataClient.getOpenPositions(config.SYMBOL);
-      if (openPositions && openPositions.length > 0) {
-        log('warn', 'Đang có vị thế mở, không mở thêm lệnh.');
-        return { action: 'skip', reason: 'position_already_open' };
-      }
+      // Đã gỡ bỏ tính năng quản lý vị thế: Cho phép mở nhiều lệnh (Hedging)
 
       // Tính số lượng units qua RiskManager
       const balance = await this.dataClient.getAccountBalance();

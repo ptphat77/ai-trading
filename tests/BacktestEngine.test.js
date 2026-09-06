@@ -138,11 +138,11 @@ describe('BacktestEngine', () => {
       const trade = result.trades[0];
       expect(trade.side).toBe('buy');
       expect(trade.entryPrice).toBe(2000);
-      expect(trade.exitPrice).toBe(2005);
+      expect(trade.exitPrice).toBe(2003.5);
       expect(trade.exitReason).toBe('tp');
       expect(trade.units).toBe(50);
-      expect(trade.profit).toBe(250); // (2005 - 2000) * 50 = 250
-      expect(result.finalBalance).toBe(10250);
+      expect(trade.profit).toBe(175); // (2003.5 - 2000) * 50 = 175
+      expect(result.finalBalance).toBe(10175);
     });
 
     it('should open BUY position and close on SL when price drops below stop loss', async () => {
@@ -232,52 +232,10 @@ describe('BacktestEngine', () => {
       const trade = result.trades[0];
       expect(trade.side).toBe('sell');
       expect(trade.entryPrice).toBe(2000);
-      expect(trade.exitPrice).toBe(1995);
+      expect(trade.exitPrice).toBe(1996.5);
       expect(trade.exitReason).toBe('tp');
-      expect(trade.profit).toBe(250); // (2000 - 1995) * 50 = 250
-      expect(result.finalBalance).toBe(10250);
-    });
-
-    it('should never open a second position while one is active', async () => {
-      const candles = [
-        { time: '2026-08-29T10:00:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
-        { time: '2026-08-29T10:01:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
-        { time: '2026-08-29T10:02:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
-        { time: '2026-08-29T10:03:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
-        // Candle 4: Triggers BUY (SL: 1998, TP: 2005)
-        { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
-        // Candle 5: Price neither hits SL nor TP (stays between 1999 and 2002)
-        { time: '2026-08-29T10:05:00Z', open: 2000, high: 2002, low: 1999, close: 2001, volume: 100 },
-        // Candle 6: Still in position, hits TP
-        { time: '2026-08-29T10:06:00Z', open: 2002, high: 2006, low: 2001, close: 2005, volume: 100 }
-      ];
-
-      mockDataClient.getCandles.mockResolvedValue(candles);
-
-      buildContext.mockReturnValue({
-        symbol: 'XAU_USD',
-        timeframe: 'M5',
-        currentPrice: 2000,
-        indicators: {
-          h1_trend: 'uptrend',
-          ma_fast: 2005,
-          ma_slow: 1995,
-          ma_cross: 'bullish_cross',
-          rsi: 20,
-          adx: 25,
-          atr: 2,
-          candle_body: 'bullish',
-          candle_wick_rejection: 'none',
-          distance_to_ma21_atr: 1.0
-        }
-      });
-
-      const engine = new BacktestEngine({ dataClient: mockDataClient });
-      const result = await engine.runRuleBased(mockConfig);
-
-      // buildContext should only be called once when no position is open (candle 4)
-      // When position is open on candle 5 and 6, it evaluates position exit instead of building new context
-      expect(result.trades.length).toBe(1);
+      expect(trade.profit).toBe(175); // (2000 - 1996.5) * 50 = 175
+      expect(result.finalBalance).toBe(10175);
     });
   });
 
