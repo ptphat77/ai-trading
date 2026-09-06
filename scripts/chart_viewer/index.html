@@ -1157,7 +1157,9 @@
   </div>
 
   <script>
-    // --- Broker Timezone Config ---
+    // ==========================================
+    // [SHARED] Config & State
+    // ==========================================
     const BROKER_UTC_OFFSET_HOURS = 3; // MT5 is currently UTC+3
     function correctTime(unixSec) {
       if (!unixSec || isNaN(unixSec)) return unixSec;
@@ -1216,7 +1218,9 @@
 
     const PRICE_SCALE_WIDTH = 85;
 
-    // --- Formatters ---
+    // ==========================================
+    // [SHARED] Formatting & Helpers
+    // ==========================================
     const priceFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const rsiFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const atrFormatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1363,7 +1367,9 @@
       renderEquityAndJournal();
     }
 
-    // --- View Switching ---
+    // ==========================================
+    // [APP] App Navigation & View Switching
+    // ==========================================
     function switchView(viewName) {
       currentView = viewName;
       document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
@@ -1387,7 +1393,9 @@
       }
     }
 
-    // --- Indicators Calculation ---
+    // ==========================================
+    // [SHARED] Indicators Calculation
+    // ==========================================
     function calculateEMA(candles, period) {
       if (!candles || candles.length < period) return [];
       const multiplier = 2 / (period + 1);
@@ -1512,7 +1520,9 @@
       return { emaFast: curEmaFast, emaSlow: curEmaSlow, rsi: curRsi, atr: curAtr };
     }
 
-    // --- Chart Setup ---
+    // ==========================================
+    // [SHARED] Chart Core & Setup
+    // ==========================================
     const chartBaseOptions = {
       autoSize: true,
       layout: {
@@ -1678,7 +1688,9 @@
       window.addEventListener('resize', resizeAllCharts);
     }
 
-    // --- Global Signal Inspector State & Functions ---
+    // ==========================================
+    // [SHARED] Signal Inspector & Crosshair Sync
+    // ==========================================
     let currentInspectorTime = null;
     let manuallyClosedSignalTime = null;
     let isMouseOverInspector = false;
@@ -2039,7 +2051,9 @@
       renderTradeMarkers();
     }
 
-    // --- Dashboard Rendering ---
+    // ==========================================
+    // [BACKTEST ONLY] Analysis Features (Dashboard)
+    // ==========================================
     function renderDashboard() {
       if (!runtimeStatus) return;
 
@@ -2204,7 +2218,9 @@
       }
     }
 
-    // --- Real-time Streaming & Live Updates ---
+    // ==========================================
+    // [LIVE ONLY] Realtime Features
+    // ==========================================
     function setAutoFollow(isActive) {
       autoFollowLive = isActive;
       const btn = document.getElementById('btn-auto-follow');
@@ -2415,7 +2431,9 @@
       } catch (e) {}
     }
 
-    // --- Full Initial Data Fetching ---
+    // ==========================================
+    // [APP] Init, Mode Detection & Candle Data Loader
+    // ==========================================
     async function loadAllData() {
       const loader = document.getElementById('loader-overlay');
       const subtext = document.getElementById('loading-subtext');
