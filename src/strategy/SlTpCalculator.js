@@ -37,13 +37,8 @@ function calculateDynamicSlTp(side, context, config, defaultSl, defaultTp) {
     slDistance = Math.min(Math.max(rawSl, minSlAtr * atr), maxSlAtr * atr);
   }
 
-  // Dynamic R:R ratio targeting high win-rate with positive expectancy
-  let rrRatio = 1.50;
-  if (adx >= 35) {
-    rrRatio = 2.00;
-  } else if (adx >= 25) {
-    rrRatio = 1.75;
-  }
+  // Enforce a strict 1:2 R:R ratio for the new scalping strategy
+  let rrRatio = 2.00;
 
   let tpDistance = slDistance * rrRatio;
   

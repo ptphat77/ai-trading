@@ -13,3 +13,6 @@ data/*.csv
 .understand-anything/
 .agents/skills/understand*
 
+# Python cache
+__pycache__/
+*.pyc

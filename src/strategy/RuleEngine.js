@@ -16,94 +16,97 @@ const { calculateDynamicSlTp } = require('./SlTpCalculator');
  */
 function evaluateRule(context, config) {
   const { indicators } = context;
-  const rsi = indicators.rsi;
-  const adx = indicators.adx ?? 0;
-  const maCross = indicators.ma_cross;
-  const h1Trend = indicators.h1_trend || 'neutral';
+  
+  const stcCurrent = indicators.stc_current;
+  const stcPrev = indicators.stc_prev;
+  const utbot1Signal = indicators.utbot1_signal;
+  const utbot2Signal = indicators.utbot2_signal;
+  
+  const stcGreenLine = config.STC_GREEN_LINE || 20;
+  const stcRedLine = config.STC_RED_LINE || 80;
+  // Tier 2 zone (relaxed boundary, requires RSI confirmation)
+  const stcTier2GreenLine = config.STC_TIER2_GREEN_LINE || 25;
+  const stcTier2RedLine = config.STC_TIER2_RED_LINE || 75;
+  const rsiOversold = config.RSI_OVERSOLD || 40;
+  const rsiOverbought = config.RSI_OVERBOUGHT || 60;
 
-  const defaultSl = config.DEFAULT_SL_ATR_MULTIPLIER || 1.2;
-  const defaultTp = config.DEFAULT_TP_ATR_MULTIPLIER || 1.8;
-  const adxThreshold = config.ADX_THRESHOLD || 20;
-  const rsiBuyMin = config.RSI_BUY_MIN || 40;
-  const rsiBuyMax = config.RSI_BUY_MAX || 65;
-  const rsiSellMin = config.RSI_SELL_MIN || 35;
-  const rsiSellMax = config.RSI_SELL_MAX || 60;
+  // We are using a fixed 1:2 R:R as requested by the strategy
+  const defaultSl = 1.0; // The actual SL distance is derived from swing structure in SlTpCalculator, this is a fallback multiplier
+  const defaultTp = 2.0;
 
-  // Precondition: ADX > threshold
-  if (adx <= adxThreshold) {
-    return skip(`ADX (${adx}) <= threshold (${adxThreshold}) - market is sideway`, defaultSl, defaultTp);
+  if (stcCurrent === null || stcPrev === null) {
+    return skip('STC is warming up (not enough candles)', defaultSl, defaultTp);
   }
 
-  const candleBody = indicators.candle_body;
-  const wickRejection = indicators.candle_wick_rejection;
-  const distanceToMa21Atr = indicators.distance_to_ma21_atr || 0;
-  const bodyToAtrRatio = indicators.body_to_atr_ratio || 0;
+  // BUY Rule: 
+  // 1. UT Bot 2 (Buy signals) issues 'buy'
+  // 2. STC is below green line
+  // 3. STC is moving up
+  const isStcBelowGreen = stcCurrent < stcGreenLine;
+  const isStcMovingUp = stcCurrent > stcPrev;
   
-  const isBullishCandle = candleBody === 'bullish' || wickRejection === 'bottom_wick';
-  const isBearishCandle = candleBody === 'bearish' || wickRejection === 'top_wick';
-  
-  const notOverextended = distanceToMa21Atr <= (config.MAX_DISTANCE_TO_MA_ATR || 1.2);
-
-  const isH1Uptrend = h1Trend === 'uptrend' || h1Trend === 'neutral_permissive'; // accommodate trading bot permissiveness
-  const isH1Downtrend = h1Trend === 'downtrend' || h1Trend === 'neutral_permissive';
-
-  // BUY Rule
-  if (
-    isH1Uptrend &&
-    maCross === 'bullish_cross' &&
-    rsi >= rsiBuyMin && rsi <= rsiBuyMax &&
-    isBullishCandle &&
-    notOverextended
-  ) {
+  if (utbot2Signal === 'buy' && isStcBelowGreen && isStcMovingUp) {
+    // calculateDynamicSlTp handles dynamic swing low + R:R calculation
     const dynamic = calculateDynamicSlTp('buy', context, config, defaultSl, defaultTp);
     return {
       action: 'buy',
       confidence: 1.0,
       sl_atr_multiplier: dynamic.slMultiplier,
       tp_atr_multiplier: dynamic.tpMultiplier,
-      reason: `Rule-based BUY: H1 Uptrend, EMA Cross, RSI (${rsi}) in [${rsiBuyMin}, ${rsiBuyMax}], ADX (${adx}) > ${adxThreshold} (RR: 1:${dynamic.rrRatio})`
+      reason: `Rule-based BUY: UT Bot 2 Buy Signal + STC (${stcCurrent}) < ${stcGreenLine} and moving up. (RR: 1:${dynamic.rrRatio})`
     };
   }
 
-  // SELL Rule
-  if (
-    isH1Downtrend &&
-    maCross === 'bearish_cross' &&
-    rsi >= rsiSellMin && rsi <= rsiSellMax &&
-    isBearishCandle &&
-    notOverextended
-  ) {
+  // SELL Rule:
+  // 1. UT Bot 1 (Sell signals) issues 'sell'
+  // 2. STC is above red line
+  // 3. STC is moving down
+  const isStcAboveRed = stcCurrent > stcRedLine;
+  const isStcMovingDown = stcCurrent < stcPrev;
+  
+  if (utbot1Signal === 'sell' && isStcAboveRed && isStcMovingDown) {
     const dynamic = calculateDynamicSlTp('sell', context, config, defaultSl, defaultTp);
     return {
       action: 'sell',
       confidence: 1.0,
       sl_atr_multiplier: dynamic.slMultiplier,
       tp_atr_multiplier: dynamic.tpMultiplier,
-      reason: `Rule-based SELL: H1 Downtrend, EMA Cross, RSI (${rsi}) in [${rsiSellMin}, ${rsiSellMax}], ADX (${adx}) > ${adxThreshold} (RR: 1:${dynamic.rrRatio})`
+      reason: `Rule-based SELL: UT Bot 1 Sell Signal + STC (${stcCurrent}) > ${stcRedLine} and moving down. (RR: 1:${dynamic.rrRatio})`
     };
   }
 
-  // Fallback: Oversold/Overbought extreme cross
-  const rsiOversold = config.RSI_OVERSOLD || 30;
-  const rsiOverbought = config.RSI_OVERBOUGHT || 70;
-  
-  if (rsi < rsiOversold && maCross === 'bullish_cross') {
-    return { 
-      action: 'buy', 
-      confidence: 1.0, 
-      sl_atr_multiplier: defaultSl, 
-      tp_atr_multiplier: defaultTp,
-      reason: `Rule-based BUY: Oversold rebound RSI (${rsi}) and bullish EMA cross` 
+  // --- TIER 2: Mean Reversion with Macro Trend Filter (EMA 200 + STC + RSI) ---
+  // Overcomes UTBot lagging issue by using EMA 200 for trend direction,
+  // catching STC exhaustions in the direction of the trend, confirmed by RSI.
+  const rsi = indicators.rsi_current ?? null;
+  const emaTrend = indicators.ema_trend ?? null;
+  const currentPrice = context.currentPrice;
+
+  const isUptrend = emaTrend !== null && currentPrice > emaTrend;
+  const isRsiOversold = rsi !== null && rsi < rsiOversold;
+
+  if (isUptrend && isStcBelowGreen && isStcMovingUp && isRsiOversold) {
+    const dynamic = calculateDynamicSlTp('buy', context, config, defaultSl, defaultTp);
+    return {
+      action: 'buy',
+      confidence: 0.85,
+      sl_atr_multiplier: dynamic.slMultiplier,
+      tp_atr_multiplier: dynamic.tpMultiplier,
+      reason: `Tier2 BUY: Price > EMA200 + STC (${stcCurrent}) < ${stcGreenLine} rising + RSI (${rsi?.toFixed(1)}) < ${rsiOversold}. (RR: 1:${dynamic.rrRatio})`
     };
   }
-  
-  if (rsi > rsiOverbought && maCross === 'bearish_cross') {
-    return { 
-      action: 'sell', 
-      confidence: 1.0, 
-      sl_atr_multiplier: defaultSl, 
-      tp_atr_multiplier: defaultTp,
-      reason: `Rule-based SELL: Overbought reversal RSI (${rsi}) and bearish EMA cross` 
+
+  const isDowntrend = emaTrend !== null && currentPrice < emaTrend;
+  const isRsiOverbought = rsi !== null && rsi > rsiOverbought;
+
+  if (isDowntrend && isStcAboveRed && isStcMovingDown && isRsiOverbought) {
+    const dynamic = calculateDynamicSlTp('sell', context, config, defaultSl, defaultTp);
+    return {
+      action: 'sell',
+      confidence: 0.85,
+      sl_atr_multiplier: dynamic.slMultiplier,
+      tp_atr_multiplier: dynamic.tpMultiplier,
+      reason: `Tier2 SELL: Price < EMA200 + STC (${stcCurrent}) > ${stcRedLine} falling + RSI (${rsi?.toFixed(1)}) > ${rsiOverbought}. (RR: 1:${dynamic.rrRatio})`
     };
   }
 

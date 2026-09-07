@@ -1,26 +1,31 @@
 const { buildContext } = require('../src/bot/SignalBuilder');
-const MA = require('../src/indicators/MA');
-const RSI = require('../src/indicators/RSI');
+const UTBot = require('../src/indicators/UTBot');
+const STC = require('../src/indicators/STC');
 const ATR = require('../src/indicators/ATR');
-const ADX = require('../src/indicators/ADX');
+const RSI = require('../src/indicators/RSI');
+const MA = require('../src/indicators/MA');
 
-jest.mock('../src/indicators/MA');
-jest.mock('../src/indicators/RSI');
+jest.mock('../src/indicators/UTBot');
+jest.mock('../src/indicators/STC');
 jest.mock('../src/indicators/ATR');
-jest.mock('../src/indicators/ADX');
+jest.mock('../src/indicators/RSI');
+jest.mock('../src/indicators/MA');
 
 describe('SignalBuilder', () => {
   const mockConfig = {
     SYMBOL: 'XAU_USD',
     TIMEFRAME: 'M5',
-    MA_FAST_PERIOD: 9,
-    MA_SLOW_PERIOD: 21,
-    RSI_PERIOD: 9,
-    RSI_OVERSOLD: 35,
-    RSI_OVERBOUGHT: 65,
+    UTBOT1_KEY: 2,
+    UTBOT1_ATR_PERIOD: 1,
+    UTBOT2_KEY: 2,
+    UTBOT2_ATR_PERIOD: 300,
+    STC_LENGTH: 80,
+    STC_FAST_LENGTH: 27,
+    STC_SLOW_LENGTH: 50,
+    STC_FACTOR: 0.5,
     ATR_PERIOD: 14,
-    ADX_PERIOD: 14,
-    ADX_THRESHOLD: 20
+    RSI_PERIOD: 14,
+    EMA_PERIOD: 200
   };
 
   const generateMockCandles = (count) => {
@@ -47,62 +52,45 @@ describe('SignalBuilder', () => {
     });
 
     it('should build the correct context object when there are enough candles', () => {
-      const candles = generateMockCandles(25);
+      const candles = generateMockCandles(100);
       
       // Mock implementations for indicators
-      MA.calculateEMA.mockImplementation((prices, period) => {
-        if (period === 9) return Array(prices.length).fill(2348.20);
-        if (period === 21) return Array(prices.length).fill(2345.80);
-        return [];
+      UTBot.calculate.mockImplementation((highs, lows, closes, key, period) => {
+        if (period === 1) return { stopLine: [], positions: [], signals: Array(closes.length).fill('sell') };
+        if (period === 300) return { stopLine: [], positions: [], signals: Array(closes.length).fill('buy') };
+        return { stopLine: [], positions: [], signals: [] };
       });
-      MA.calculateSMA.mockImplementation((prices, period) => {
-        if (period === 9) return Array(prices.length).fill(2348.20);
-        if (period === 21) return Array(prices.length).fill(2345.80);
-        return [];
-      });
-      MA.getCrossSignal.mockReturnValue('bullish_cross');
       
-      RSI.calculate.mockReturnValue(Array(candles.length).fill(45.5));
-      RSI.getZone.mockReturnValue('neutral');
-      
+      STC.calculate.mockReturnValue(Array(candles.length).fill(45.5));
       ATR.calculate.mockReturnValue(Array(candles.length).fill(1.85));
-      ADX.calculate.mockReturnValue(Array(candles.length).fill({ adx: 25.4, pdi: 30, mdi: 15 }));
+      RSI.calculate.mockReturnValue(Array(candles.length).fill(55.0));
+      MA.calculateEMA.mockReturnValue(Array(candles.length).fill(2300));
 
       const result = buildContext(candles, mockConfig);
 
       // Verify the indicators were called correctly
-      expect(MA.calculateEMA).toHaveBeenCalled();
-      expect(RSI.calculate).toHaveBeenCalledTimes(1);
+      expect(UTBot.calculate).toHaveBeenCalledTimes(2);
+      expect(STC.calculate).toHaveBeenCalledTimes(1);
       expect(ATR.calculate).toHaveBeenCalledTimes(1);
-      expect(ADX.calculate).toHaveBeenCalledTimes(1);
 
       // Verify the output matches the expected schema
       expect(result).toEqual({
         symbol: 'XAU_USD',
         timeframe: 'M5',
-        currentPrice: candles[24].close,
+        currentPrice: candles[99].close,
         indicators: {
-          ma_fast: 2348.20,
-          ma_slow: 2345.80,
-          rsi: 45.5,
-          adx: 25.4,
-          adx_trending: true,
+          utbot1_signal: 'sell',
+          utbot2_signal: 'buy',
+          stc_current: 45.5,
+          stc_prev: 45.5,
           atr: 1.85,
-          ma_cross: 'bullish_cross',
-          rsi_zone: 'neutral',
-          rsi_touched_oversold: false,
-          rsi_touched_overbought: false,
-          candle_close_vs_ma21: 'above',
-          candle_close_vs_ma_slow: 'above',
+          rsi_current: 55,
+          ema_trend: 2300,
           candle_body: 'bullish',
-          candle_wick_rejection: 'none', // Because wick logic requires > 2x body now
+          candle_wick_rejection: 'none',
           body_to_atr_ratio: 0.54,
-          distance_to_ma21_atr: 15.78,
-          recent_swing_high: 2376,
-          recent_swing_low: 2348,
-          h1_trend: 'neutral',
-          h1_ema50: null,
-          h1_ema200: null
+          recent_swing_high: 2451,
+          recent_swing_low: 2398
         },
         recentCandles: candles.slice(-5)
       });

@@ -3,10 +3,11 @@ const AIAgentFactory = require('../ai/AIAgentFactory');
 const { buildContext } = require('../bot/SignalBuilder');
 const { evaluateRule } = require('../strategy/RuleEngine');
 const { checkNoiseFilters, updateAfterClose, createFilterState } = require('../strategy/NoiseFilter');
-const { calculateSMA, calculateEMA, getCrossSignal } = require('../indicators/MA');
-const { calculate: calculateRSI, getZone: getRSIZone } = require('../indicators/RSI');
 const { calculate: calculateATR } = require('../indicators/ATR');
-const { calculate: calculateADX } = require('../indicators/ADX');
+const { calculate: calculateRSI } = require('../indicators/RSI');
+const { calculateEMA } = require('../indicators/MA');
+const UTBot = require('../indicators/UTBot');
+const STC = require('../indicators/STC');
 const { resampleToH1 } = require('../utils/resample');
 const { calculateUnits } = require('../bot/RiskManager');
 const globalConfig = require('../config');
@@ -107,56 +108,60 @@ class BacktestEngine {
     // Check if buildContext is mocked in test environment
     const isMocked = Boolean(buildContext && (buildContext._isMockFunction || buildContext.mock));
 
-    let maFast = [];
-    let maSlow = [];
-    let rsiArray = [];
+    let utbot1Array = [];
+    let utbot2Array = [];
+    let stcArray = [];
     let atrArray = [];
-    let adxArray = [];
-    let fastOffset = 0;
-    let slowOffset = 0;
-    let rsiOffset = 0;
+    let rsiArray = [];
+    let emaArray = [];
     let atrOffset = 0;
-    let adxOffset = 0;
+    let utbot1Offset = 0;
+    let utbot2Offset = 0;
+    let stcOffset = 0;
+    let rsiOffset = 0;
+    let emaOffset = 0;
 
     let h1Candles = [];
-    let h1FastEma = [];
-    let h1SlowEma = [];
-    let h1FastOffset = 0;
-    let h1SlowOffset = 0;
 
     if (!isMocked) {
       const closePrices = candles.map(c => c.close);
       const highPrices = candles.map(c => c.high);
       const lowPrices = candles.map(c => c.low);
-      const isEMA = (config.MA_TYPE || 'EMA').toUpperCase() === 'EMA';
 
-      maFast = (isEMA ? calculateEMA : calculateSMA)(closePrices, config.MA_FAST_PERIOD || 9);
-      maSlow = (isEMA ? calculateEMA : calculateSMA)(closePrices, config.MA_SLOW_PERIOD || 21);
-      rsiArray = calculateRSI(closePrices, config.RSI_PERIOD || 9);
+      const ut1Key = config.UTBOT1_KEY || 2;
+      const ut1Period = config.UTBOT1_ATR_PERIOD || 1;
+      const ut2Key = config.UTBOT2_KEY || 2;
+      const ut2Period = config.UTBOT2_ATR_PERIOD || 300;
+
+      utbot1Array = UTBot.calculate(highPrices, lowPrices, closePrices, ut1Key, ut1Period).signals;
+      utbot2Array = UTBot.calculate(highPrices, lowPrices, closePrices, ut2Key, ut2Period).signals;
+      
+      const stcLength = config.STC_LENGTH || 80;
+      const stcFast = config.STC_FAST_LENGTH || 27;
+      const stcSlow = config.STC_SLOW_LENGTH || 50;
+      const stcFactor = config.STC_FACTOR || 0.5;
+      stcArray = STC.calculate(closePrices, stcLength, stcFast, stcSlow, stcFactor);
+      
       atrArray = calculateATR(highPrices, lowPrices, closePrices, config.ATR_PERIOD || 14);
-      adxArray = calculateADX(highPrices, lowPrices, closePrices, config.ADX_PERIOD || 14);
 
-      fastOffset = candles.length - maFast.length;
-      slowOffset = candles.length - maSlow.length;
-      rsiOffset = candles.length - rsiArray.length;
+      // RSI for Tier 2 confirmation
+      rsiArray = calculateRSI(closePrices, config.RSI_PERIOD || 14);
+
+      // EMA for Tier 2 macro trend filter
+      emaArray = calculateEMA(closePrices, config.EMA_PERIOD || 200);
+
+      utbot1Offset = candles.length - utbot1Array.length;
+      utbot2Offset = candles.length - utbot2Array.length;
+      stcOffset = candles.length - stcArray.length;
       atrOffset = candles.length - atrArray.length;
-      adxOffset = candles.length - adxArray.length;
-
-      // Resample to H1 from all available candles so H1 EMAs are fully calculated
-      h1Candles = resampleToH1(allCandles || candles);
-      const h1Closes = h1Candles.map(c => c.close);
-      const h1FastPeriod = config.H1_MA_FAST_PERIOD || 50;
-      const h1SlowPeriod = config.H1_MA_SLOW_PERIOD || 200;
-
-      if (h1Candles.length >= h1SlowPeriod) {
-        h1FastEma = calculateEMA(h1Closes, h1FastPeriod);
-        h1SlowEma = calculateEMA(h1Closes, h1SlowPeriod);
-        h1FastOffset = h1Candles.length - h1FastEma.length;
-        h1SlowOffset = h1Candles.length - h1SlowEma.length;
-      }
+      rsiOffset = candles.length - rsiArray.length;
+      emaOffset = candles.length - emaArray.length;
     }
 
-    // Helper to find latest completed H1 candle index
+    // Resample to H1 from all available candles so H1 EMAs are fully calculated
+    h1Candles = resampleToH1(allCandles || candles);
+    const h1Closes = h1Candles.map(c => c.close);
+    // Helper to find latest completed H1 candle index (kept if needed for resampling features)
     let currentH1Idx = 0;
 
     // Slide window across candles
@@ -165,23 +170,20 @@ class BacktestEngine {
       const candleDateStr = currentCandle.time.slice(0, 10);
       const currentCandleMs = new Date(currentCandle.time).getTime();
 
-      let currFast, prevFast, currSlow, prevSlow, currRsi, currAtr, currAdx, maCross;
+      let currUtBot1, currUtBot2, currStc, prevStc, currAtr, currRsi, currEma;
 
       if (!isMocked) {
-        currFast = maFast[i - fastOffset];
-        prevFast = maFast[i - fastOffset - 1];
-        currSlow = maSlow[i - slowOffset];
-        prevSlow = maSlow[i - slowOffset - 1];
-        currRsi = rsiArray[i - rsiOffset];
+        currUtBot1 = utbot1Array[i - utbot1Offset];
+        currUtBot2 = utbot2Array[i - utbot2Offset];
+        currStc = stcArray[i - stcOffset];
+        prevStc = stcArray[i - stcOffset - 1];
         currAtr = atrArray[i - atrOffset];
-        const adxObj = adxArray[i - adxOffset];
-        currAdx = adxObj ? adxObj.adx : 0;
+        currRsi = rsiArray[i - rsiOffset]; // may be undefined during warmup
+        currEma = emaArray[i - emaOffset]; // may be undefined during warmup
 
-        if (currFast === undefined || currSlow === undefined || currRsi === undefined || currAtr === undefined) {
+        if (currUtBot1 === undefined || currUtBot2 === undefined || currAtr === undefined) {
           continue;
         }
-
-        maCross = getCrossSignal(prevFast, currFast, prevSlow, currSlow);
       }
 
       // 1. Check open positions against current candle price extremes & early exit
@@ -202,7 +204,7 @@ class BacktestEngine {
           } else if (currentCandle.high >= openPosition.tp) {
             exitPrice = openPosition.tp;
             exitReason = 'tp';
-          } else if (earlyExitEnabled && maCross === 'bearish_cross' && floatingGain <= 0.20 * openPosition.slDistance) {
+          } else if (earlyExitEnabled && currUtBot1 === 'sell' && currStc > config.STC_RED_LINE && currStc < prevStc && floatingGain <= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
           } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.20 * openPosition.slDistance) {
@@ -215,13 +217,6 @@ class BacktestEngine {
             exitReason = 'stagnation_exit';
           }
 
-          // Trailing Stop based on EMA21 (Loose)
-          if (exitReason === null && currSlow) {
-            const trailingSl = currSlow - (0.60 * currAtr);
-            if (trailingSl > openPosition.sl) {
-              openPosition.sl = trailingSl;
-            }
-          }
         } else if (openPosition.side === 'sell') {
           const floatingGain = openPosition.entryPrice - currentCandle.close;
 
@@ -231,7 +226,7 @@ class BacktestEngine {
           } else if (currentCandle.low <= openPosition.tp) {
             exitPrice = openPosition.tp;
             exitReason = 'tp';
-          } else if (earlyExitEnabled && maCross === 'bullish_cross' && floatingGain <= 0.20 * openPosition.slDistance) {
+          } else if (earlyExitEnabled && currUtBot2 === 'buy' && currStc < config.STC_GREEN_LINE && currStc > prevStc && floatingGain <= 0.20 * openPosition.slDistance) {
             exitPrice = currentCandle.close;
             exitReason = 'early_exit';
           } else if (openPosition.candlesHeld >= 3 && floatingGain >= 0.20 * openPosition.slDistance) {
@@ -242,13 +237,6 @@ class BacktestEngine {
             exitReason = 'stagnation_exit';
           }
 
-          // Trailing Stop based on EMA21 (Loose)
-          if (exitReason === null && currSlow) {
-            const trailingSl = currSlow + (0.60 * currAtr);
-            if (trailingSl < openPosition.sl) {
-              openPosition.sl = trailingSl;
-            }
-          }
         }
 
         if (exitReason !== null) {
@@ -315,46 +303,7 @@ class BacktestEngine {
       if (isMocked) {
         const windowCandles = candles.slice(i - windowSize + 1, i + 1);
         context = buildContext(windowCandles, config);
-        if (context && context.indicators) {
-          maCross = context.indicators.ma_cross;
-          h1Trend = context.indicators.h1_trend || 'uptrend';
-        }
       } else {
-        const rsiZone = getRSIZone(currRsi, config.RSI_OVERSOLD || 35, config.RSI_OVERBOUGHT || 65);
-
-        // Determine current H1 candle corresponding to this M5 candle
-        while (
-          currentH1Idx + 1 < h1Candles.length &&
-          new Date(h1Candles[currentH1Idx + 1].time).getTime() <= currentCandleMs
-        ) {
-          currentH1Idx++;
-        }
-
-        let h1FastVal = null;
-        let h1SlowVal = null;
-
-        if (h1FastEma.length > 0 && currentH1Idx >= h1FastOffset) {
-          h1FastVal = h1FastEma[currentH1Idx - h1FastOffset];
-        }
-        if (h1SlowEma.length > 0 && currentH1Idx >= h1SlowOffset) {
-          h1SlowVal = h1SlowEma[currentH1Idx - h1SlowOffset];
-        }
-
-        if (h1FastVal !== null && h1SlowVal !== null) {
-          const currentH1Close = h1Candles[currentH1Idx].close;
-          if (currentH1Close > h1FastVal && h1FastVal > h1SlowVal) {
-            h1Trend = 'uptrend';
-          } else if (currentH1Close < h1FastVal && h1FastVal < h1SlowVal) {
-            h1Trend = 'downtrend';
-          } else {
-            h1Trend = 'sideway';
-          }
-        } else {
-          // If not enough H1 candles for EMA200, assume neutral
-          h1Trend = 'neutral_permissive';
-        }
-
-        const candleCloseVsMaSlow = currentCandle.close > currSlow ? 'above' : (currentCandle.close < currSlow ? 'below' : 'equal');
         const candleBodyDirection = currentCandle.close > currentCandle.open
           ? 'bullish'
           : (currentCandle.close < currentCandle.open ? 'bearish' : 'doji');
@@ -373,44 +322,29 @@ class BacktestEngine {
         }
 
         const bodyToAtrRatio = currAtr > 0 ? Number((bodySize / currAtr).toFixed(2)) : 0;
-        const distanceToMa21 = Math.abs(currentCandle.close - currSlow);
-        const distanceToMa21Atr = currAtr > 0 ? Number((distanceToMa21 / currAtr).toFixed(2)) : 0;
 
         const lookbackSR = 50;
         const recentSrCandles = candles.slice(Math.max(0, i - lookbackSR + 1), i + 1);
         const recentSwingHigh = recentSrCandles.length > 0 ? Math.max(...recentSrCandles.map(c => c.high)) : currentCandle.high;
         const recentSwingLow = recentSrCandles.length > 0 ? Math.min(...recentSrCandles.map(c => c.low)) : currentCandle.low;
 
-        const lookbackLocal = 15;
-        const localCandles = candles.slice(Math.max(0, i - lookbackLocal + 1), i + 1);
-        const localSwingHigh = localCandles.length > 0 ? Math.max(...localCandles.map(c => c.high)) : currentCandle.high;
-        const localSwingLow = localCandles.length > 0 ? Math.min(...localCandles.map(c => c.low)) : currentCandle.low;
-
         context = {
           symbol: config.SYMBOL || 'XAU_USD',
           timeframe: config.TIMEFRAME || 'M5',
           currentPrice: currentCandle.close,
           indicators: {
-            ma_fast: Number(currFast.toFixed(2)),
-            ma_slow: Number(currSlow.toFixed(2)),
-            rsi: Number(currRsi.toFixed(2)),
-            adx: Number(currAdx.toFixed(2)),
+            utbot1_signal: currUtBot1,
+            utbot2_signal: currUtBot2,
+            stc_current: currStc !== null ? Number(currStc.toFixed(2)) : null,
+            stc_prev: prevStc !== null ? Number(prevStc.toFixed(2)) : null,
             atr: Number(currAtr.toFixed(2)),
-            ma_cross: maCross,
-            rsi_zone: rsiZone,
-            candle_close_vs_ma21: candleCloseVsMaSlow,
-            candle_close_vs_ma_slow: candleCloseVsMaSlow,
+            rsi_current: currRsi !== undefined ? Number(currRsi.toFixed(2)) : null,
+            ema_trend: currEma !== undefined ? Number(currEma.toFixed(2)) : null,
             candle_body: candleBodyDirection,
             candle_wick_rejection: candleWickRejection,
             body_to_atr_ratio: bodyToAtrRatio,
-            distance_to_ma21_atr: distanceToMa21Atr,
             recent_swing_high: recentSwingHigh,
-            recent_swing_low: recentSwingLow,
-            local_swing_high: localSwingHigh,
-            local_swing_low: localSwingLow,
-            h1_trend: h1Trend,
-            h1_ema50: h1FastVal ? Number(h1FastVal.toFixed(2)) : null,
-            h1_ema200: h1SlowVal ? Number(h1SlowVal.toFixed(2)) : null
+            recent_swing_low: recentSwingLow
           },
           recentCandles: candles.slice(Math.max(0, i - 4), i + 1)
         };
@@ -421,9 +355,12 @@ class BacktestEngine {
       }
 
       // 3. Apply Noise Filters (Max trades/day & Consecutive loss cooldown)
-      const filterResult = checkNoiseFilters(filterState, candleDateStr, currentCandleMs, config);
-      const filterBlocked = filterResult.blocked;
-      const filterReason = filterResult.reason;
+      // Tạm thời vô hiệu hóa để test workflow (không giới hạn lệnh/ngày và cooldown)
+      // const filterResult = checkNoiseFilters(filterState, candleDateStr, currentCandleMs, config);
+      // const filterBlocked = filterResult.blocked;
+      // const filterReason = filterResult.reason;
+      const filterBlocked = false;
+      const filterReason = '';
 
       // 4. Determine decision based on mode
       let decision;

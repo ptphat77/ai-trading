@@ -29,31 +29,38 @@ const config = {
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
 
   // --- Strategy ---
-  STRATEGY_VERSION: process.env.STRATEGY_VERSION || 'v2.4.4',
+  STRATEGY_VERSION: process.env.STRATEGY_VERSION || 'v3.1.0',
   SYMBOL: process.env.SYMBOL || 'XAU_USD',
   TIMEFRAME: process.env.TIMEFRAME || 'M5',
   CANDLE_COUNT: parseInt(process.env.CANDLE_COUNT, 10) || 300,
   RISK_PER_TRADE: parseFloat(process.env.RISK_PER_TRADE) || 0.015,
   MIN_CONFIDENCE: parseFloat(process.env.MIN_CONFIDENCE) || 0.7,
 
-  // --- Strategy Parameters (chien-luoc-ema-rsi-m5-bot.md) ---
-  MA_TYPE: process.env.MA_TYPE || 'EMA',
-  MA_FAST_PERIOD: parseInt(process.env.MA_FAST_PERIOD, 10) || 9,
-  MA_SLOW_PERIOD: parseInt(process.env.MA_SLOW_PERIOD, 10) || 21,
-  H1_MA_FAST_PERIOD: parseInt(process.env.H1_MA_FAST_PERIOD, 10) || 50,
-  H1_MA_SLOW_PERIOD: parseInt(process.env.H1_MA_SLOW_PERIOD, 10) || 200,
-  RSI_PERIOD: parseInt(process.env.RSI_PERIOD, 10) || 9,
-  RSI_BUY_MIN: parseFloat(process.env.RSI_BUY_MIN) || 40,
-  RSI_BUY_MAX: parseFloat(process.env.RSI_BUY_MAX) || 65,
-  RSI_SELL_MIN: parseFloat(process.env.RSI_SELL_MIN) || 35,
-  RSI_SELL_MAX: parseFloat(process.env.RSI_SELL_MAX) || 60,
-  RSI_OVERSOLD: parseInt(process.env.RSI_OVERSOLD, 10) || 35,
-  RSI_OVERBOUGHT: parseInt(process.env.RSI_OVERBOUGHT, 10) || 65,
-  ADX_PERIOD: parseInt(process.env.ADX_PERIOD, 10) || 14,
-  ADX_THRESHOLD: parseFloat(process.env.ADX_THRESHOLD) || 20,
+  // --- Strategy Parameters (UT Bot + STC) ---
+  UTBOT1_KEY: parseFloat(process.env.UTBOT1_KEY) || 2,
+  UTBOT1_ATR_PERIOD: parseInt(process.env.UTBOT1_ATR_PERIOD, 10) || 1,
+  UTBOT2_KEY: parseFloat(process.env.UTBOT2_KEY) || 2,
+  UTBOT2_ATR_PERIOD: parseInt(process.env.UTBOT2_ATR_PERIOD, 10) || 300,
+  
+  STC_LENGTH: parseInt(process.env.STC_LENGTH, 10) || 60,
+  STC_FAST_LENGTH: parseInt(process.env.STC_FAST_LENGTH, 10) || 35,
+  STC_SLOW_LENGTH: parseInt(process.env.STC_SLOW_LENGTH, 10) || 50,
+  STC_FACTOR: parseFloat(process.env.STC_FACTOR) || 0.7,
+  STC_GREEN_LINE: parseFloat(process.env.STC_GREEN_LINE) || 20,
+  STC_RED_LINE: parseFloat(process.env.STC_RED_LINE) || 80,
+  // Tier 2 entry zone (relaxed, requires RSI confirmation)
+  STC_TIER2_GREEN_LINE: parseFloat(process.env.STC_TIER2_GREEN_LINE) || 25,
+  STC_TIER2_RED_LINE: parseFloat(process.env.STC_TIER2_RED_LINE) || 75,
+
+  // RSI (used as Tier 2 confirmation indicator)
+  RSI_PERIOD: parseInt(process.env.RSI_PERIOD, 10) || 14,
+  RSI_OVERSOLD: parseFloat(process.env.RSI_OVERSOLD) || 40,
+  RSI_OVERBOUGHT: parseFloat(process.env.RSI_OVERBOUGHT) || 60,
+  
+  // EMA (used as Tier 2 macro trend filter)
+  EMA_PERIOD: parseInt(process.env.EMA_PERIOD, 10) || 200,
+  
   ATR_PERIOD: parseInt(process.env.ATR_PERIOD, 10) || 14,
-  DEFAULT_SL_ATR_MULTIPLIER: parseFloat(process.env.DEFAULT_SL_ATR_MULTIPLIER) || 1.2,
-  DEFAULT_TP_ATR_MULTIPLIER: parseFloat(process.env.DEFAULT_TP_ATR_MULTIPLIER) || 1.8,
   EARLY_EXIT_ENABLED: process.env.EARLY_EXIT_ENABLED === 'false' ? false : true,
   MAX_TRADES_PER_DAY: parseInt(process.env.MAX_TRADES_PER_DAY, 10) || 5,
   CONSECUTIVE_LOSS_COOLDOWN_HOURS: parseInt(process.env.CONSECUTIVE_LOSS_COOLDOWN_HOURS, 10) || 2,

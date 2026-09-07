@@ -2,95 +2,89 @@ const { evaluateRule } = require('../src/strategy/RuleEngine');
 
 describe('RuleEngine', () => {
   const config = {
-    DEFAULT_SL_ATR_MULTIPLIER: 1.2,
-    DEFAULT_TP_ATR_MULTIPLIER: 1.8,
-    ADX_THRESHOLD: 20,
-    RSI_BUY_MIN: 40,
-    RSI_BUY_MAX: 65,
-    RSI_SELL_MIN: 35,
-    RSI_SELL_MAX: 60,
-    MAX_DISTANCE_TO_MA_ATR: 1.2,
-    RSI_OVERSOLD: 30,
-    RSI_OVERBOUGHT: 70,
+    STC_GREEN_LINE: 25,
+    STC_RED_LINE: 75,
   };
 
   const createBaseContext = () => ({
     currentPrice: 2000,
     indicators: {
-      rsi: 50,
-      adx: 25,
-      ma_cross: 'none',
-      h1_trend: 'neutral',
-      candle_body: 'bullish',
-      candle_wick_rejection: 'none',
-      distance_to_ma21_atr: 0.5,
+      utbot1_signal: null,
+      utbot2_signal: null,
+      stc_current: 50,
+      stc_prev: 50,
       atr: 2
     }
   });
 
-  it('BUY rule: should return buy when conditions are met', () => {
+  it('should skip when STC is null (warming up)', () => {
     const context = createBaseContext();
-    context.indicators.h1_trend = 'uptrend';
-    context.indicators.ma_cross = 'bullish_cross';
-    context.indicators.rsi = 50;
+    context.indicators.stc_current = null;
+    
+    const result = evaluateRule(context, config);
+    expect(result.action).toBe('skip');
+    expect(result.reason).toMatch(/warming up/);
+  });
 
+  it('BUY rule: should return buy when UTBot 2 Buy and STC < 25 and moving up', () => {
+    const context = createBaseContext();
+    context.indicators.utbot2_signal = 'buy';
+    context.indicators.stc_prev = 10;
+    context.indicators.stc_current = 20; // < 25 and moving up
+    
     const result = evaluateRule(context, config);
     expect(result.action).toBe('buy');
     expect(result.confidence).toBe(1.0);
   });
 
-  it('SELL rule: should return sell when conditions are met', () => {
+  it('SELL rule: should return sell when UTBot 1 Sell and STC > 75 and moving down', () => {
     const context = createBaseContext();
-    context.indicators.h1_trend = 'downtrend';
-    context.indicators.ma_cross = 'bearish_cross';
-    context.indicators.rsi = 45;
-    context.indicators.candle_body = 'bearish';
-
+    context.indicators.utbot1_signal = 'sell';
+    context.indicators.stc_prev = 90;
+    context.indicators.stc_current = 80; // > 75 and moving down
+    
     const result = evaluateRule(context, config);
     expect(result.action).toBe('sell');
     expect(result.confidence).toBe(1.0);
   });
 
-  it('ADX filter: should skip if ADX <= threshold', () => {
+  it('should skip BUY if STC is moving down', () => {
     const context = createBaseContext();
-    context.indicators.adx = 15;
-    context.indicators.h1_trend = 'uptrend';
-    context.indicators.ma_cross = 'bullish_cross';
-    context.indicators.rsi = 50;
-
-    const result = evaluateRule(context, config);
-    expect(result.action).toBe('skip');
-    expect(result.reason).toMatch(/ADX/);
-  });
-
-  it('H1 trend mismatch: should skip uptrend + bearish_cross', () => {
-    const context = createBaseContext();
-    context.indicators.h1_trend = 'uptrend';
-    context.indicators.ma_cross = 'bearish_cross';
-    context.indicators.candle_body = 'bearish';
-
+    context.indicators.utbot2_signal = 'buy';
+    context.indicators.stc_prev = 20;
+    context.indicators.stc_current = 10; // < 25 but moving down
+    
     const result = evaluateRule(context, config);
     expect(result.action).toBe('skip');
   });
 
-  it('RSI out of zone: should skip if RSI > rsiBuyMax', () => {
+  it('should skip BUY if STC is above green line', () => {
     const context = createBaseContext();
-    context.indicators.h1_trend = 'uptrend';
-    context.indicators.ma_cross = 'bullish_cross';
-    context.indicators.rsi = 70; // > 65
-
+    context.indicators.utbot2_signal = 'buy';
+    context.indicators.stc_prev = 30;
+    context.indicators.stc_current = 40; // moving up but > 25
+    
     const result = evaluateRule(context, config);
     expect(result.action).toBe('skip');
   });
 
-  it('Oversold fallback: RSI < 30 + bullish_cross should buy', () => {
+  it('should skip SELL if STC is moving up', () => {
     const context = createBaseContext();
-    context.indicators.h1_trend = 'downtrend'; // Not matching MTF
-    context.indicators.ma_cross = 'bullish_cross';
-    context.indicators.rsi = 25; // < 30
-
+    context.indicators.utbot1_signal = 'sell';
+    context.indicators.stc_prev = 80;
+    context.indicators.stc_current = 90; // > 75 but moving up
+    
     const result = evaluateRule(context, config);
-    expect(result.action).toBe('buy');
-    expect(result.reason).toMatch(/Oversold/);
+    expect(result.action).toBe('skip');
+  });
+
+  it('should skip SELL if STC is below red line', () => {
+    const context = createBaseContext();
+    context.indicators.utbot1_signal = 'sell';
+    context.indicators.stc_prev = 70;
+    context.indicators.stc_current = 60; // moving down but < 75
+    
+    const result = evaluateRule(context, config);
+    expect(result.action).toBe('skip');
   });
 });
