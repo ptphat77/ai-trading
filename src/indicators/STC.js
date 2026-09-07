@@ -17,8 +17,8 @@ function calculate(closes, length = 80, fastLength = 27, slowLength = 50, factor
   const emaFast = EMA.calculate({ period: fastLength, values: closes });
   const emaSlow = EMA.calculate({ period: slowLength, values: closes });
   
-  // Align MACD with emaSlow
-  const diff = emaSlow.length - emaFast.length;
+  // Align MACD with emaSlow (fast EMA starts earlier, so it has more elements)
+  const diff = emaFast.length - emaSlow.length;
   const macd = [];
   for (let i = 0; i < emaSlow.length; i++) {
     macd.push(emaFast[i + diff] - emaSlow[i]);

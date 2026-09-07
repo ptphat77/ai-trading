@@ -30,8 +30,10 @@
       --accent-color: #2962ff;
       --accent-hover: #1e53e5;
       
-      --ema-fast-color: #00bcd4;
-      --ema-slow-color: #ff9800;
+      --utbot1-color: #f23645;
+      --utbot2-color: #00e676;
+      --stc-color: #2962ff;
+      --ema-trend-color: #ff9800;
       --rsi-color: #ba68c8;
       --atr-color: #ffb74d;
     }
@@ -240,8 +242,10 @@
       display: inline-block;
     }
 
-    .dot.ema-fast { background-color: var(--ema-fast-color); box-shadow: 0 0 6px rgba(0, 188, 212, 0.6); }
-    .dot.ema-slow { background-color: var(--ema-slow-color); box-shadow: 0 0 6px rgba(255, 152, 0, 0.6); }
+    .dot.utbot1 { background-color: var(--utbot1-color); box-shadow: 0 0 6px rgba(242, 54, 69, 0.6); }
+    .dot.utbot2 { background-color: var(--utbot2-color); box-shadow: 0 0 6px rgba(0, 230, 118, 0.6); }
+    .dot.stc { background-color: var(--stc-color); box-shadow: 0 0 6px rgba(41, 98, 255, 0.6); }
+    .dot.ema-trend { background-color: var(--ema-trend-color); box-shadow: 0 0 6px rgba(255, 152, 0, 0.6); }
     .dot.rsi { background-color: var(--rsi-color); }
     .dot.atr { background-color: var(--atr-color); }
 
@@ -440,13 +444,13 @@
     }
 
     .panel-wrapper.main-panel {
-      flex: 62 1 0%;
+      flex: 52 1 0%;
       min-height: 0;
       border-bottom: 1px solid var(--border-color);
     }
 
     .panel-wrapper.sub-panel {
-      flex: 19 1 0%;
+      flex: 16 1 0%;
       min-height: 0;
       border-bottom: 1px solid var(--border-color);
     }
@@ -925,9 +929,11 @@
       <div class="position-badge" id="position-badge" style="display:none;"></div>
 
       <div class="indicators-legend" id="chart-legend-box">
-        <div class="legend-item"><span class="dot ema-fast"></span>EMA 9</div>
-        <div class="legend-item"><span class="dot ema-slow"></span>EMA 21</div>
-        <div class="legend-item"><span class="dot rsi"></span>RSI 9</div>
+        <div class="legend-item"><span class="dot utbot1"></span>UTBot 1 (Sell)</div>
+        <div class="legend-item"><span class="dot utbot2"></span>UTBot 2 (Buy)</div>
+        <div class="legend-item"><span class="dot stc"></span>STC</div>
+        <div class="legend-item"><span class="dot ema-trend"></span>EMA 200</div>
+        <div class="legend-item"><span class="dot rsi"></span>RSI 14</div>
         <div class="legend-item"><span class="dot atr"></span>ATR 14</div>
       </div>
 
@@ -1000,22 +1006,29 @@
           <div class="info-item"><span class="info-label">C:</span><span class="info-value" id="hud-close">--</span></div>
           <div class="info-item"><span class="info-label">CHG:</span><span class="info-value" id="hud-change">--</span></div>
           <div class="info-item"><span class="info-label">VOL:</span><span class="info-value" id="hud-vol">--</span></div>
-          <div class="info-item"><span class="info-label" style="color: var(--ema-fast-color)" id="hud-ema-fast-label">EMA9:</span><span class="info-value" id="hud-ema-fast">--</span></div>
-          <div class="info-item"><span class="info-label" style="color: var(--ema-slow-color)" id="hud-ema-slow-label">EMA21:</span><span class="info-value" id="hud-ema-slow">--</span></div>
-          <div class="info-item"><span class="info-label" style="color: var(--rsi-color)" id="hud-rsi-label">RSI9:</span><span class="info-value" id="hud-rsi">--</span></div>
+          <div class="info-item"><span class="info-label" style="color: var(--utbot1-color)" id="hud-utbot1-label">UT1:</span><span class="info-value" id="hud-utbot1">--</span></div>
+          <div class="info-item"><span class="info-label" style="color: var(--utbot2-color)" id="hud-utbot2-label">UT2:</span><span class="info-value" id="hud-utbot2">--</span></div>
+          <div class="info-item"><span class="info-label" style="color: var(--stc-color)" id="hud-stc-label">STC:</span><span class="info-value" id="hud-stc">--</span></div>
+          <div class="info-item"><span class="info-label" style="color: var(--ema-trend-color)" id="hud-ema-trend-label">EMA200:</span><span class="info-value" id="hud-ema-trend">--</span></div>
+          <div class="info-item"><span class="info-label" style="color: var(--rsi-color)" id="hud-rsi-label">RSI14:</span><span class="info-value" id="hud-rsi">--</span></div>
           <div class="info-item"><span class="info-label" style="color: var(--atr-color)" id="hud-atr-label">ATR14:</span><span class="info-value" id="hud-atr">--</span></div>
         </div>
 
         <!-- Multi-panel Chart Viewport -->
         <div class="chart-container" id="chart-viewport">
           <div class="panel-wrapper main-panel" id="main-panel-wrapper">
-            <div class="panel-title-badge" id="main-badge">XAU/USD • EMA 9 / 21</div>
+            <div class="panel-title-badge" id="main-badge">XAU/USD • UTBot 1 (2, 1) • UTBot 2 (2, 300) • EMA 200</div>
             <div class="signal-inspector-card" id="signal-inspector-card" style="display: none;"></div>
             <div id="chart-main" class="chart-div"></div>
           </div>
 
+          <div class="panel-wrapper sub-panel" id="stc-panel-wrapper">
+            <div class="panel-title-badge" id="stc-badge" style="color: var(--stc-color);">STC (60, 35, 50) • Red 80 / Green 20</div>
+            <div id="chart-stc" class="chart-div"></div>
+          </div>
+
           <div class="panel-wrapper sub-panel" id="rsi-panel-wrapper">
-            <div class="panel-title-badge" id="rsi-badge" style="color: var(--rsi-color);">RSI (9) • OB 65 / OS 35</div>
+            <div class="panel-title-badge" id="rsi-badge" style="color: var(--rsi-color);">RSI (14) • OB 60 / OS 40</div>
             <div id="chart-rsi" class="chart-div"></div>
           </div>
 
@@ -1169,8 +1182,10 @@
     // --- Global State ---
     let currentView = 'chart'; // 'chart' | 'dashboard'
     let candleData = [];
-    let emaFastData = [];
-    let emaSlowData = [];
+    let utbot1Data = [];
+    let utbot2Data = [];
+    let emaTrendData = [];
+    let stcData = [];
     let rsiData = [];
     let atrData = [];
     let lookupMap = new Map();
@@ -1189,18 +1204,29 @@
     let livePollTimer = null;
     let countdownInterval = null;
 
-    let chartMain, chartRsi, chartAtr, equityChart;
-    let candleSeries, emaFastSeries, emaSlowSeries, rsiSeries, atrSeries, equitySeries;
+    let chartMain, chartStc, chartRsi, chartAtr, equityChart;
+    let candleSeries, utbot1Series, utbot2Series, emaTrendSeries, stcSeries, rsiSeries, atrSeries, equitySeries;
     let isSyncingRange = false;
     let isSyncingCrosshair = false;
     let runtimeConfig = {
       symbol: 'XAU_USD',
       timeframe: 'M5',
-      maFast: 9,
-      maSlow: 21,
-      rsiPeriod: 9,
-      rsiOversold: 35,
-      rsiOverbought: 65,
+      utbot1Key: 2,
+      utbot1AtrPeriod: 1,
+      utbot2Key: 2,
+      utbot2AtrPeriod: 300,
+      stcLength: 60,
+      stcFastLength: 35,
+      stcSlowLength: 50,
+      stcFactor: 0.7,
+      stcGreenLine: 20,
+      stcRedLine: 80,
+      stcTier2GreenLine: 25,
+      stcTier2RedLine: 75,
+      rsiPeriod: 14,
+      rsiOversold: 40,
+      rsiOverbought: 60,
+      emaPeriod: 200,
       atrPeriod: 14
     };
 
@@ -1350,6 +1376,7 @@
       };
 
       if (chartMain) chartMain.applyOptions(tzOptions);
+      if (chartStc) chartStc.applyOptions(tzOptions);
       if (chartRsi) chartRsi.applyOptions(tzOptions);
       if (chartAtr) chartAtr.applyOptions(scaleOptions);
       if (equityChart) equityChart.applyOptions(scaleOptions);
@@ -1396,6 +1423,23 @@
     // ==========================================
     // [SHARED] Indicators Calculation
     // ==========================================
+    function calculateEMAValues(values, period) {
+      if (!values || values.length < period) return [];
+      const multiplier = 2 / (period + 1);
+      const results = [];
+      let sum = 0;
+      for (let i = 0; i < period; i++) sum += values[i];
+      let prevEMA = sum / period;
+      results.push(prevEMA);
+
+      for (let i = period; i < values.length; i++) {
+        const ema = (values[i] - prevEMA) * multiplier + prevEMA;
+        results.push(ema);
+        prevEMA = ema;
+      }
+      return results;
+    }
+
     function calculateEMA(candles, period) {
       if (!candles || candles.length < period) return [];
       const multiplier = 2 / (period + 1);
@@ -1417,29 +1461,29 @@
       return results;
     }
 
-    function calculateRSI(candles, period = 9) {
-      if (!candles || candles.length <= period) return [];
-      const results = [];
-      for (let i = 0; i < period; i++) results.push({ time: candles[i].time });
+    function calculateATRValues(highs, lows, closes, period = 14) {
+      if (!closes || closes.length <= period) return Array(closes ? closes.length : 0).fill(null);
+      const results = Array(period).fill(null);
 
-      let gains = 0, losses = 0;
-      for (let i = 1; i <= period; i++) {
-        const diff = candles[i].close - candles[i - 1].close;
-        if (diff > 0) gains += diff; else losses += Math.abs(diff);
-      }
-      let avgGain = gains / period;
-      let avgLoss = losses / period;
-      let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-      results.push({ time: candles[period].time, value: 100 - (100 / (1 + rs)) });
+      const getTR = (i) => {
+        if (i === 0) return highs[0] - lows[0];
+        return Math.max(
+          highs[i] - lows[i],
+          Math.abs(highs[i] - closes[i - 1]),
+          Math.abs(lows[i] - closes[i - 1])
+        );
+      };
 
-      for (let i = period + 1; i < candles.length; i++) {
-        const diff = candles[i].close - candles[i - 1].close;
-        const cGain = diff > 0 ? diff : 0;
-        const cLoss = diff < 0 ? Math.abs(diff) : 0;
-        avgGain = (avgGain * (period - 1) + cGain) / period;
-        avgLoss = (avgLoss * (period - 1) + cLoss) / period;
-        rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-        results.push({ time: candles[i].time, value: 100 - (100 / (1 + rs)) });
+      let trSum = 0;
+      for (let i = 1; i <= period; i++) trSum += getTR(i);
+      let prevATR = trSum / period;
+      results.push(prevATR);
+
+      for (let i = period + 1; i < closes.length; i++) {
+        const tr = getTR(i);
+        const atr = (prevATR * (period - 1) + tr) / period;
+        results.push(atr);
+        prevATR = atr;
       }
       return results;
     }
@@ -1468,56 +1512,194 @@
       return results;
     }
 
-    // --- Fast Incremental Indicators for Live Streaming ---
-    function computeIncrementalIndicators(candle, isNewBar) {
-      const fastP = runtimeConfig.maFast || 9;
-      const slowP = runtimeConfig.maSlow || 21;
-      const rsiP = runtimeConfig.rsiPeriod || 9;
-      const atrP = runtimeConfig.atrPeriod || 14;
+    function calculateRSI(candles, period = 14) {
+      if (!candles || candles.length <= period) return [];
+      const results = [];
+      for (let i = 0; i < period; i++) results.push({ time: candles[i].time });
 
-      let curEmaFast, curEmaSlow, curRsi, curAtr;
+      let gains = 0, losses = 0;
+      for (let i = 1; i <= period; i++) {
+        const diff = candles[i].close - candles[i - 1].close;
+        if (diff > 0) gains += diff; else losses += Math.abs(diff);
+      }
+      let avgGain = gains / period;
+      let avgLoss = losses / period;
+      let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      results.push({ time: candles[period].time, value: 100 - (100 / (1 + rs)) });
+
+      for (let i = period + 1; i < candles.length; i++) {
+        const diff = candles[i].close - candles[i - 1].close;
+        const cGain = diff > 0 ? diff : 0;
+        const cLoss = diff < 0 ? Math.abs(diff) : 0;
+        avgGain = (avgGain * (period - 1) + cGain) / period;
+        avgLoss = (avgLoss * (period - 1) + cLoss) / period;
+        rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        results.push({ time: candles[i].time, value: 100 - (100 / (1 + rs)) });
+      }
+      return results;
+    }
+
+    function calculateUTBot(candles, key = 2, period = 1) {
+      if (!candles || candles.length <= period) return { stopLineData: [], positions: [], signals: [] };
+      const highs = candles.map(c => c.high);
+      const lows = candles.map(c => c.low);
+      const closes = candles.map(c => c.close);
+
+      const atrArr = calculateATRValues(highs, lows, closes, period);
+
+      let prev_xATRTrailingStop = 0;
+      const stopLineData = [];
+      const positions = [];
+      const signals = [];
+      let prev_position = 0;
+
+      for (let i = 0; i < closes.length; i++) {
+        const currentAtr = atrArr[i];
+        if (currentAtr === null || currentAtr === undefined) {
+          stopLineData.push({ time: candles[i].time });
+          positions.push(null);
+          signals.push(null);
+          continue;
+        }
+
+        const close = closes[i];
+        const prev_close = i > 0 ? closes[i - 1] : close;
+        const loss = key * currentAtr;
+        let trailingStop = prev_xATRTrailingStop;
+
+        if (close > prev_xATRTrailingStop && prev_close > prev_xATRTrailingStop) {
+          trailingStop = Math.max(prev_xATRTrailingStop, close - loss);
+        } else if (close < prev_xATRTrailingStop && prev_close < prev_xATRTrailingStop) {
+          trailingStop = Math.min(prev_xATRTrailingStop, close + loss);
+        } else if (close > prev_xATRTrailingStop) {
+          trailingStop = close - loss;
+        } else {
+          trailingStop = close + loss;
+        }
+
+        stopLineData.push({ time: candles[i].time, value: trailingStop });
+        prev_xATRTrailingStop = trailingStop;
+
+        let position = prev_position;
+        if (close > trailingStop) position = 1;
+        else if (close < trailingStop) position = -1;
+        positions.push(position);
+
+        let signal = null;
+        if (position === 1 && prev_position === -1) signal = 'buy';
+        else if (position === -1 && prev_position === 1) signal = 'sell';
+        signals.push(signal);
+
+        prev_position = position;
+      }
+
+      return { stopLineData, positions, signals };
+    }
+
+    function calculateSTC(candles, length = 60, fastLength = 35, slowLength = 50, factor = 0.7) {
+      if (!candles || candles.length < slowLength) return [];
+      const closes = candles.map(c => c.close);
+
+      const emaFast = calculateEMAValues(closes, fastLength);
+      const emaSlow = calculateEMAValues(closes, slowLength);
+
+      const diff = emaFast.length - emaSlow.length;
+      const macd = [];
+      for (let i = 0; i < emaSlow.length; i++) {
+        macd.push(emaFast[i + diff] - emaSlow[i]);
+      }
+
+      const stc = [];
+      let pf = null;
+      let stcVal = null;
+      const pfArr = [];
+
+      for (let i = 0; i < macd.length; i++) {
+        if (i < length - 1) {
+          stc.push(null);
+          pfArr.push(null);
+          continue;
+        }
+
+        const windowMacd = macd.slice(i - length + 1, i + 1);
+        const lowMacd = Math.min(...windowMacd);
+        const highMacd = Math.max(...windowMacd);
+
+        let stochMacd = 0;
+        if (highMacd - lowMacd > 0) {
+          stochMacd = ((macd[i] - lowMacd) / (highMacd - lowMacd)) * 100;
+        }
+
+        pf = pf === null ? stochMacd : pf + factor * (stochMacd - pf);
+        pfArr.push(pf);
+
+        const validWindowPf = pfArr.slice(i - length + 1, i + 1).filter(v => v !== null);
+        if (validWindowPf.length < length) {
+          stc.push(null);
+          continue;
+        }
+
+        const lowPf = Math.min(...validWindowPf);
+        const highPf = Math.max(...validWindowPf);
+
+        let stochPf = 0;
+        if (highPf - lowPf > 0) {
+          stochPf = ((pf - lowPf) / (highPf - lowPf)) * 100;
+        }
+
+        stcVal = stcVal === null ? stochPf : stcVal + factor * (stochPf - stcVal);
+        stc.push(stcVal);
+      }
+
+      const padding = Array(closes.length - stc.length).fill(null);
+      const fullStc = [...padding, ...stc];
+
+      return fullStc.map((val, idx) => {
+        if (val === null || val === undefined) {
+          return { time: candles[idx].time };
+        }
+        return { time: candles[idx].time, value: val };
+      });
+    }
+
+    // --- Incremental Indicators for Live Streaming ---
+    function computeIncrementalIndicators(candle, isNewBar) {
+      const sliceCount = Math.max(350, (runtimeConfig.utbot2AtrPeriod || 300) + 50);
+      const recentCandles = candleData.slice(-sliceCount);
+
+      const ut1Res = calculateUTBot(recentCandles, runtimeConfig.utbot1Key, runtimeConfig.utbot1AtrPeriod);
+      const ut2Res = calculateUTBot(recentCandles, runtimeConfig.utbot2Key, runtimeConfig.utbot2AtrPeriod);
+      const stcRes = calculateSTC(recentCandles, runtimeConfig.stcLength, runtimeConfig.stcFastLength, runtimeConfig.stcSlowLength, runtimeConfig.stcFactor);
+      const emaRes = calculateEMA(recentCandles, runtimeConfig.emaPeriod);
+      const rsiRes = calculateRSI(recentCandles, runtimeConfig.rsiPeriod);
+      const atrRes = calculateATR(recentCandles, runtimeConfig.atrPeriod);
+
+      const curUt1 = ut1Res.stopLineData.length > 0 ? ut1Res.stopLineData[ut1Res.stopLineData.length - 1].value : undefined;
+      const curUt2 = ut2Res.stopLineData.length > 0 ? ut2Res.stopLineData[ut2Res.stopLineData.length - 1].value : undefined;
+      const curStc = stcRes.length > 0 ? stcRes[stcRes.length - 1].value : undefined;
+      const curEma = emaRes.length > 0 ? emaRes[emaRes.length - 1].value : undefined;
+      const curRsi = rsiRes.length > 0 ? rsiRes[rsiRes.length - 1].value : undefined;
+      const curAtr = atrRes.length > 0 ? atrRes[atrRes.length - 1].value : undefined;
 
       if (candleData.length >= 2) {
         if (!isNewBar) {
-          // Updating forming candle
-          const prevEmaFast = emaFastData.length >= 2 ? emaFastData[emaFastData.length - 2].value : candle.close;
-          curEmaFast = prevEmaFast !== undefined ? ((candle.close - prevEmaFast) * (2 / (fastP + 1)) + prevEmaFast) : candle.close;
-
-          const prevEmaSlow = emaSlowData.length >= 2 ? emaSlowData[emaSlowData.length - 2].value : candle.close;
-          curEmaSlow = prevEmaSlow !== undefined ? ((candle.close - prevEmaSlow) * (2 / (slowP + 1)) + prevEmaSlow) : candle.close;
-
-          const rsiSlice = calculateRSI(candleData.slice(-50), rsiP);
-          curRsi = rsiSlice.length > 0 ? rsiSlice[rsiSlice.length - 1].value : undefined;
-
-          const atrSlice = calculateATR(candleData.slice(-60), atrP);
-          curAtr = atrSlice.length > 0 ? atrSlice[atrSlice.length - 1].value : undefined;
-
-          if (emaFastData.length > 0) emaFastData[emaFastData.length - 1] = { time: candle.time, value: curEmaFast };
-          if (emaSlowData.length > 0) emaSlowData[emaSlowData.length - 1] = { time: candle.time, value: curEmaSlow };
+          if (utbot1Data.length > 0) utbot1Data[utbot1Data.length - 1] = { time: candle.time, value: curUt1 };
+          if (utbot2Data.length > 0) utbot2Data[utbot2Data.length - 1] = { time: candle.time, value: curUt2 };
+          if (stcData.length > 0) stcData[stcData.length - 1] = { time: candle.time, value: curStc };
+          if (emaTrendData.length > 0) emaTrendData[emaTrendData.length - 1] = { time: candle.time, value: curEma };
           if (rsiData.length > 0) rsiData[rsiData.length - 1] = { time: candle.time, value: curRsi };
           if (atrData.length > 0) atrData[atrData.length - 1] = { time: candle.time, value: curAtr };
         } else {
-          // Appending new bar
-          const prevEmaFast = emaFastData.length > 0 ? emaFastData[emaFastData.length - 1].value : candle.close;
-          curEmaFast = prevEmaFast !== undefined ? ((candle.close - prevEmaFast) * (2 / (fastP + 1)) + prevEmaFast) : candle.close;
-
-          const prevEmaSlow = emaSlowData.length > 0 ? emaSlowData[emaSlowData.length - 1].value : candle.close;
-          curEmaSlow = prevEmaSlow !== undefined ? ((candle.close - prevEmaSlow) * (2 / (slowP + 1)) + prevEmaSlow) : candle.close;
-
-          const rsiSlice = calculateRSI(candleData.slice(-50), rsiP);
-          curRsi = rsiSlice.length > 0 ? rsiSlice[rsiSlice.length - 1].value : undefined;
-
-          const atrSlice = calculateATR(candleData.slice(-60), atrP);
-          curAtr = atrSlice.length > 0 ? atrSlice[atrSlice.length - 1].value : undefined;
-
-          emaFastData.push({ time: candle.time, value: curEmaFast });
-          emaSlowData.push({ time: candle.time, value: curEmaSlow });
+          utbot1Data.push({ time: candle.time, value: curUt1 });
+          utbot2Data.push({ time: candle.time, value: curUt2 });
+          stcData.push({ time: candle.time, value: curStc });
+          emaTrendData.push({ time: candle.time, value: curEma });
           rsiData.push({ time: candle.time, value: curRsi });
           atrData.push({ time: candle.time, value: curAtr });
         }
       }
 
-      return { emaFast: curEmaFast, emaSlow: curEmaSlow, rsi: curRsi, atr: curAtr };
+      return { utbot1: curUt1, utbot2: curUt2, stc: curStc, emaTrend: curEma, rsi: curRsi, atr: curAtr };
     }
 
     // ==========================================
@@ -1551,12 +1733,16 @@
 
     function resizeAllCharts() {
       const mainEl = document.getElementById('chart-main');
+      const stcEl = document.getElementById('chart-stc');
       const rsiEl = document.getElementById('chart-rsi');
       const atrEl = document.getElementById('chart-atr');
       const eqEl = document.getElementById('equity-chart');
 
       if (chartMain && mainEl && mainEl.clientWidth > 0 && mainEl.clientHeight > 0) {
         chartMain.applyOptions({ width: mainEl.clientWidth, height: mainEl.clientHeight });
+      }
+      if (chartStc && stcEl && stcEl.clientWidth > 0 && stcEl.clientHeight > 0) {
+        chartStc.applyOptions({ width: stcEl.clientWidth, height: stcEl.clientHeight });
       }
       if (chartRsi && rsiEl && rsiEl.clientWidth > 0 && rsiEl.clientHeight > 0) {
         chartRsi.applyOptions({ width: rsiEl.clientWidth, height: rsiEl.clientHeight });
@@ -1571,6 +1757,7 @@
 
     function initCharts() {
       const mainEl = document.getElementById('chart-main');
+      const stcEl = document.getElementById('chart-stc');
       const rsiEl = document.getElementById('chart-rsi');
       const atrEl = document.getElementById('chart-atr');
 
@@ -1586,13 +1773,36 @@
         wickUpColor: '#089981', wickDownColor: '#f23645'
       });
 
-      emaFastSeries = chartMain.addLineSeries({
-        color: '#00bcd4', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'EMA 9'
+      utbot1Series = chartMain.addLineSeries({
+        color: '#f23645', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, title: 'UTBot 1 (Sell)'
       });
 
-      emaSlowSeries = chartMain.addLineSeries({
-        color: '#ff9800', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'EMA 21'
+      utbot2Series = chartMain.addLineSeries({
+        color: '#00e676', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, priceLineVisible: false, lastValueVisible: true, title: 'UTBot 2 (Buy)'
       });
+
+      emaTrendSeries = chartMain.addLineSeries({
+        color: '#ff9800', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'EMA 200'
+      });
+
+      chartStc = LightweightCharts.createChart(stcEl, {
+        ...chartBaseOptions,
+        timeScale: { visible: false, borderColor: '#2b2f3a' },
+        rightPriceScale: { ...chartBaseOptions.rightPriceScale, scaleMargins: { top: 0.1, bottom: 0.1 } }
+      });
+
+      stcSeries = chartStc.addLineSeries({
+        color: '#2962ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'STC'
+      });
+      const stcRed = runtimeConfig.stcRedLine || 80;
+      const stcGreen = runtimeConfig.stcGreenLine || 20;
+      const stcT2Red = runtimeConfig.stcTier2RedLine || 75;
+      const stcT2Green = runtimeConfig.stcTier2GreenLine || 25;
+      stcSeries.createPriceLine({ price: stcRed, color: 'rgba(242, 54, 69, 0.8)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid, title: `Red ${stcRed}` });
+      stcSeries.createPriceLine({ price: stcT2Red, color: 'rgba(242, 54, 69, 0.35)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: `T2 ${stcT2Red}` });
+      stcSeries.createPriceLine({ price: 50, color: 'rgba(134, 137, 147, 0.25)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted });
+      stcSeries.createPriceLine({ price: stcT2Green, color: 'rgba(8, 153, 129, 0.35)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: `T2 ${stcT2Green}` });
+      stcSeries.createPriceLine({ price: stcGreen, color: 'rgba(8, 153, 129, 0.8)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid, title: `Green ${stcGreen}` });
 
       chartRsi = LightweightCharts.createChart(rsiEl, {
         ...chartBaseOptions,
@@ -1601,11 +1811,13 @@
       });
 
       rsiSeries = chartRsi.addLineSeries({
-        color: '#ba68c8', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'RSI 9'
+        color: '#ba68c8', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `RSI ${runtimeConfig.rsiPeriod || 14}`
       });
-      rsiSeries.createPriceLine({ price: 65, color: 'rgba(242, 54, 69, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'OB 65' });
+      const rsiOb = runtimeConfig.rsiOverbought || 60;
+      const rsiOs = runtimeConfig.rsiOversold || 40;
+      rsiSeries.createPriceLine({ price: rsiOb, color: 'rgba(242, 54, 69, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: `OB ${rsiOb}` });
       rsiSeries.createPriceLine({ price: 50, color: 'rgba(134, 137, 147, 0.3)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted });
-      rsiSeries.createPriceLine({ price: 35, color: 'rgba(8, 153, 129, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'OS 35' });
+      rsiSeries.createPriceLine({ price: rsiOs, color: 'rgba(8, 153, 129, 0.6)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: `OS ${rsiOs}` });
 
       chartAtr = LightweightCharts.createChart(atrEl, {
         ...chartBaseOptions,
@@ -1620,11 +1832,11 @@
       });
 
       atrSeries = chartAtr.addLineSeries({
-        color: '#ffb74d', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'ATR 14'
+        color: '#ffb74d', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `ATR ${runtimeConfig.atrPeriod || 14}`
       });
 
       // Synchronize range & Infinite Scroll & Auto-follow Pause Detection
-      const charts = [chartMain, chartRsi, chartAtr];
+      const charts = [chartMain, chartStc, chartRsi, chartAtr];
       charts.forEach((c, idx) => {
         c.timeScale().subscribeVisibleLogicalRangeChange(range => {
           if (isSyncingRange || !range) return;
@@ -1645,6 +1857,7 @@
       });
 
       chartMain.subscribeCrosshairMove(p => syncCrosshair(chartMain, p));
+      chartStc.subscribeCrosshairMove(p => syncCrosshair(chartStc, p));
       chartRsi.subscribeCrosshairMove(p => syncCrosshair(chartRsi, p));
       chartAtr.subscribeCrosshairMove(p => syncCrosshair(chartAtr, p));
 
@@ -1733,6 +1946,7 @@
         isCrosshairUserHovering = false;
         showLatestHUD();
         if (sourceChart !== chartMain && chartMain) chartMain.clearCrosshairPosition();
+        if (sourceChart !== chartStc && chartStc) chartStc.clearCrosshairPosition();
         if (sourceChart !== chartRsi && chartRsi) chartRsi.clearCrosshairPosition();
         if (sourceChart !== chartAtr && chartAtr) chartAtr.clearCrosshairPosition();
         isSyncingCrosshair = false;
@@ -1745,8 +1959,9 @@
       updateHUD(data);
 
       if (sourceChart !== chartMain && data.candle && chartMain) chartMain.setCrosshairPosition(data.candle.close, t, candleSeries);
-      if (sourceChart !== chartRsi && chartRsi) chartRsi.setCrosshairPosition(data.rsi || 50, t, rsiSeries);
-      if (sourceChart !== chartAtr && chartAtr) chartAtr.setCrosshairPosition(data.atr || 0, t, atrSeries);
+      if (sourceChart !== chartStc && chartStc) chartStc.setCrosshairPosition(data.stc !== undefined ? data.stc : 50, t, stcSeries);
+      if (sourceChart !== chartRsi && chartRsi) chartRsi.setCrosshairPosition(data.rsi !== undefined ? data.rsi : 50, t, rsiSeries);
+      if (sourceChart !== chartAtr && chartAtr) chartAtr.setCrosshairPosition(data.atr !== undefined ? data.atr : 0, t, atrSeries);
 
       if (sourceChart === chartMain && tradeLookupMap.has(t)) {
         // If the user manually closed the inspector for this exact candle, don't reopen it
@@ -1812,7 +2027,7 @@
 
     function updateHUD(item) {
       if (!item || !item.candle) return;
-      const { candle, emaFast, emaSlow, rsi, atr } = item;
+      const { candle, utbot1, utbot2, stc, emaTrend, rsi, atr } = item;
       const isBull = candle.close >= candle.open;
       const chg = candle.close - candle.open;
       const chgPercent = ((chg / candle.open) * 100).toFixed(2);
@@ -1831,8 +2046,21 @@
       chgEl.className = `info-value ${isBull ? 'bullish' : 'bearish'}`;
 
       document.getElementById('hud-vol').textContent = candle.volume ? candle.volume.toLocaleString() : '--';
-      document.getElementById('hud-ema-fast').textContent = emaFast !== undefined ? priceFormatter.format(emaFast) : '--';
-      document.getElementById('hud-ema-slow').textContent = emaSlow !== undefined ? priceFormatter.format(emaSlow) : '--';
+      document.getElementById('hud-utbot1').textContent = utbot1 !== undefined ? priceFormatter.format(utbot1) : '--';
+      document.getElementById('hud-utbot2').textContent = utbot2 !== undefined ? priceFormatter.format(utbot2) : '--';
+      
+      const stcEl = document.getElementById('hud-stc');
+      if (stc !== undefined && stc !== null) {
+        stcEl.textContent = stc.toFixed(1);
+        if (stc <= (runtimeConfig.stcGreenLine || 20)) stcEl.style.color = 'var(--bullish-color)';
+        else if (stc >= (runtimeConfig.stcRedLine || 80)) stcEl.style.color = 'var(--bearish-color)';
+        else stcEl.style.color = 'var(--stc-color)';
+      } else {
+        stcEl.textContent = '--';
+        stcEl.style.color = 'var(--text-primary)';
+      }
+
+      document.getElementById('hud-ema-trend').textContent = emaTrend !== undefined ? priceFormatter.format(emaTrend) : '--';
       document.getElementById('hud-rsi').textContent = rsi !== undefined ? rsiFormatter.format(rsi) : '--';
       document.getElementById('hud-atr').textContent = atr !== undefined ? atrFormatter.format(atr) : '--';
     }
@@ -2305,8 +2533,10 @@
         const ind = computeIncrementalIndicators(incoming, false);
 
         candleSeries.update(incoming);
-        if (ind.emaFast !== undefined) emaFastSeries.update({ time: incoming.time, value: ind.emaFast });
-        if (ind.emaSlow !== undefined) emaSlowSeries.update({ time: incoming.time, value: ind.emaSlow });
+        if (ind.utbot1 !== undefined) utbot1Series.update({ time: incoming.time, value: ind.utbot1 });
+        if (ind.utbot2 !== undefined) utbot2Series.update({ time: incoming.time, value: ind.utbot2 });
+        if (ind.stc !== undefined) stcSeries.update({ time: incoming.time, value: ind.stc });
+        if (ind.emaTrend !== undefined) emaTrendSeries.update({ time: incoming.time, value: ind.emaTrend });
         if (ind.rsi !== undefined) rsiSeries.update({ time: incoming.time, value: ind.rsi });
         if (ind.atr !== undefined) atrSeries.update({ time: incoming.time, value: ind.atr });
 
@@ -2319,8 +2549,10 @@
         const ind = computeIncrementalIndicators(incoming, true);
 
         candleSeries.update(incoming);
-        if (ind.emaFast !== undefined) emaFastSeries.update({ time: incoming.time, value: ind.emaFast });
-        if (ind.emaSlow !== undefined) emaSlowSeries.update({ time: incoming.time, value: ind.emaSlow });
+        if (ind.utbot1 !== undefined) utbot1Series.update({ time: incoming.time, value: ind.utbot1 });
+        if (ind.utbot2 !== undefined) utbot2Series.update({ time: incoming.time, value: ind.utbot2 });
+        if (ind.stc !== undefined) stcSeries.update({ time: incoming.time, value: ind.stc });
+        if (ind.emaTrend !== undefined) emaTrendSeries.update({ time: incoming.time, value: ind.emaTrend });
         if (ind.rsi !== undefined) rsiSeries.update({ time: incoming.time, value: ind.rsi });
         if (ind.atr !== undefined) atrSeries.update({ time: incoming.time, value: ind.atr });
 
@@ -2332,6 +2564,7 @@
           if (range) {
             isSyncingRange = true;
             chartMain.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
+            chartStc.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
             chartRsi.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
             chartAtr.timeScale().setVisibleLogicalRange({ from: range.from + 1, to: range.to + 1 });
             isSyncingRange = false;
@@ -2446,12 +2679,23 @@
           if (statusRes.ok) {
             runtimeStatus = await statusRes.json();
             if (runtimeStatus.indicators) {
-              runtimeConfig.maFast = runtimeStatus.indicators.ma_fast || 9;
-              runtimeConfig.maSlow = runtimeStatus.indicators.ma_slow || 21;
-              runtimeConfig.rsiPeriod = runtimeStatus.indicators.rsi_period || 9;
+              runtimeConfig.utbot1Key = runtimeStatus.indicators.utbot1_key || 2;
+              runtimeConfig.utbot1AtrPeriod = runtimeStatus.indicators.utbot1_atr_period || 1;
+              runtimeConfig.utbot2Key = runtimeStatus.indicators.utbot2_key || 2;
+              runtimeConfig.utbot2AtrPeriod = runtimeStatus.indicators.utbot2_atr_period || 300;
+              runtimeConfig.stcLength = runtimeStatus.indicators.stc_length || 60;
+              runtimeConfig.stcFastLength = runtimeStatus.indicators.stc_fast || 35;
+              runtimeConfig.stcSlowLength = runtimeStatus.indicators.stc_slow || 50;
+              runtimeConfig.stcFactor = runtimeStatus.indicators.stc_factor || 0.7;
+              runtimeConfig.stcGreenLine = runtimeStatus.indicators.stc_green_line || 20;
+              runtimeConfig.stcRedLine = runtimeStatus.indicators.stc_red_line || 80;
+              runtimeConfig.stcTier2GreenLine = runtimeStatus.indicators.stc_tier2_green_line || 25;
+              runtimeConfig.stcTier2RedLine = runtimeStatus.indicators.stc_tier2_red_line || 75;
+              runtimeConfig.rsiPeriod = runtimeStatus.indicators.rsi_period || 14;
+              runtimeConfig.rsiOversold = runtimeStatus.indicators.rsi_oversold || 40;
+              runtimeConfig.rsiOverbought = runtimeStatus.indicators.rsi_overbought || 60;
+              runtimeConfig.emaPeriod = runtimeStatus.indicators.ema_period || 200;
               runtimeConfig.atrPeriod = runtimeStatus.indicators.atr_period || 14;
-              runtimeConfig.rsiOversold = runtimeStatus.indicators.rsi_oversold || 35;
-              runtimeConfig.rsiOverbought = runtimeStatus.indicators.rsi_overbought || 65;
             }
           }
         } catch (e) {
@@ -2499,13 +2743,19 @@
         document.getElementById('candles-count').textContent = `Total: ${candleData.length.toLocaleString()} candles`;
 
         // 4. Calculate indicators & maps
-        emaFastData = calculateEMA(candleData, runtimeConfig.maFast);
-        emaSlowData = calculateEMA(candleData, runtimeConfig.maSlow);
+        const ut1Res = calculateUTBot(candleData, runtimeConfig.utbot1Key, runtimeConfig.utbot1AtrPeriod);
+        const ut2Res = calculateUTBot(candleData, runtimeConfig.utbot2Key, runtimeConfig.utbot2AtrPeriod);
+        utbot1Data = ut1Res.stopLineData;
+        utbot2Data = ut2Res.stopLineData;
+        stcData = calculateSTC(candleData, runtimeConfig.stcLength, runtimeConfig.stcFastLength, runtimeConfig.stcSlowLength, runtimeConfig.stcFactor);
+        emaTrendData = calculateEMA(candleData, runtimeConfig.emaPeriod);
         rsiData = calculateRSI(candleData, runtimeConfig.rsiPeriod);
         atrData = calculateATR(candleData, runtimeConfig.atrPeriod);
 
-        const emaFastMap = new Map(emaFastData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
-        const emaSlowMap = new Map(emaSlowData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const ut1Map = new Map(utbot1Data.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const ut2Map = new Map(utbot2Data.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const stcMap = new Map(stcData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const emaMap = new Map(emaTrendData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
         const rsiMap = new Map(rsiData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
         const atrMap = new Map(atrData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
 
@@ -2513,8 +2763,10 @@
         candleData.forEach(c => {
           lookupMap.set(c.time, {
             candle: c,
-            emaFast: emaFastMap.get(c.time),
-            emaSlow: emaSlowMap.get(c.time),
+            utbot1: ut1Map.get(c.time),
+            utbot2: ut2Map.get(c.time),
+            stc: stcMap.get(c.time),
+            emaTrend: emaMap.get(c.time),
             rsi: rsiMap.get(c.time),
             atr: atrMap.get(c.time)
           });
@@ -2522,10 +2774,19 @@
 
         // Set series
         candleSeries.setData(candleData);
-        emaFastSeries.setData(emaFastData);
-        emaSlowSeries.setData(emaSlowData);
+        utbot1Series.setData(utbot1Data);
+        utbot2Series.setData(utbot2Data);
+        emaTrendSeries.setData(emaTrendData);
+        stcSeries.setData(stcData);
         rsiSeries.setData(rsiData);
         atrSeries.setData(atrData);
+
+        // Update badge labels
+        const dispSym = (candlesJson.symbol || 'XAU_USD').replace('_', '/');
+        document.getElementById('main-badge').textContent = `${dispSym} • UTBot 1 (${runtimeConfig.utbot1Key}, ${runtimeConfig.utbot1AtrPeriod}) • UTBot 2 (${runtimeConfig.utbot2Key}, ${runtimeConfig.utbot2AtrPeriod}) • EMA ${runtimeConfig.emaPeriod}`;
+        document.getElementById('stc-badge').textContent = `STC (${runtimeConfig.stcLength}, ${runtimeConfig.stcFastLength}, ${runtimeConfig.stcSlowLength}) • Red ${runtimeConfig.stcRedLine} / Green ${runtimeConfig.stcGreenLine}`;
+        document.getElementById('rsi-badge').textContent = `RSI (${runtimeConfig.rsiPeriod}) • OB ${runtimeConfig.rsiOverbought} / OS ${runtimeConfig.rsiOversold}`;
+        document.getElementById('atr-badge').textContent = `ATR (${runtimeConfig.atrPeriod})`;
 
         // Zoom to recent
         if (candleData.length > 0) {
@@ -2654,18 +2915,19 @@
         candleData.sort((a, b) => a.time - b.time);
 
         // Recalculate indicators
-        const fastP = runtimeConfig.maFast || 9;
-        const slowP = runtimeConfig.maSlow || 21;
-        const rsiP = runtimeConfig.rsiPeriod || 9;
-        const atrP = runtimeConfig.atrPeriod || 14;
+        const ut1Res = calculateUTBot(candleData, runtimeConfig.utbot1Key, runtimeConfig.utbot1AtrPeriod);
+        const ut2Res = calculateUTBot(candleData, runtimeConfig.utbot2Key, runtimeConfig.utbot2AtrPeriod);
+        utbot1Data = ut1Res.stopLineData;
+        utbot2Data = ut2Res.stopLineData;
+        stcData = calculateSTC(candleData, runtimeConfig.stcLength, runtimeConfig.stcFastLength, runtimeConfig.stcSlowLength, runtimeConfig.stcFactor);
+        emaTrendData = calculateEMA(candleData, runtimeConfig.emaPeriod);
+        rsiData = calculateRSI(candleData, runtimeConfig.rsiPeriod);
+        atrData = calculateATR(candleData, runtimeConfig.atrPeriod);
 
-        emaFastData = calculateEMA(candleData, fastP);
-        emaSlowData = calculateEMA(candleData, slowP);
-        rsiData = calculateRSI(candleData, rsiP);
-        atrData = calculateATR(candleData, atrP);
-
-        const emaFastMap = new Map(emaFastData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
-        const emaSlowMap = new Map(emaSlowData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const ut1Map = new Map(utbot1Data.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const ut2Map = new Map(utbot2Data.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const stcMap = new Map(stcData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
+        const emaMap = new Map(emaTrendData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
         const rsiMap = new Map(rsiData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
         const atrMap = new Map(atrData.filter(d => d.value !== undefined).map(d => [d.time, d.value]));
 
@@ -2673,8 +2935,10 @@
         candleData.forEach(c => {
           lookupMap.set(c.time, {
             candle: c,
-            emaFast: emaFastMap.get(c.time),
-            emaSlow: emaSlowMap.get(c.time),
+            utbot1: ut1Map.get(c.time),
+            utbot2: ut2Map.get(c.time),
+            stc: stcMap.get(c.time),
+            emaTrend: emaMap.get(c.time),
             rsi: rsiMap.get(c.time),
             atr: atrMap.get(c.time)
           });
@@ -2682,8 +2946,10 @@
 
         // Set series data
         candleSeries.setData(candleData);
-        emaFastSeries.setData(emaFastData);
-        emaSlowSeries.setData(emaSlowData);
+        utbot1Series.setData(utbot1Data);
+        utbot2Series.setData(utbot2Data);
+        emaTrendSeries.setData(emaTrendData);
+        stcSeries.setData(stcData);
         rsiSeries.setData(rsiData);
         atrSeries.setData(atrData);
 
@@ -2695,6 +2961,7 @@
           };
           isSyncingRange = true;
           chartMain.timeScale().setVisibleLogicalRange(newRange);
+          chartStc.timeScale().setVisibleLogicalRange(newRange);
           chartRsi.timeScale().setVisibleLogicalRange(newRange);
           chartAtr.timeScale().setVisibleLogicalRange(newRange);
           isSyncingRange = false;
