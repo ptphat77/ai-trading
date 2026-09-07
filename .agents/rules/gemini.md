@@ -82,6 +82,7 @@ Record the current version and baseline backtest. All parameter changes must upd
 - **Never let a single API error crash the bot loop.** All external API calls must have `try/catch`; errors should only `skip` that cycle, not crash the entire loop.
 - **Never change strategy params without updating `STRATEGY.md`.** Bump the version, state the reason, and include the backtest result — this is a mandatory requirement before merging.
 - **Never go Live without Demo ≥ 1 week.** Only switch to live trading after the Demo has run stably and continuously for ≥ 1 week (per `PROJECT-RULES.md §1.3`).
+- **Never open a new position while one is already open** on the same symbol.
 - **Never write business logic inside `BrokerClient.js`.** This module only calls the API and returns raw data.
 - **Never implement out-of-scope features.** Check `PRD.md §4` before building anything new.
 - **Never add rule logic directly to `TradingBot.js` or `BacktestEngine.js`.** All Tier 1 strategy rules must live in `src/strategy/RuleEngine.js` and be called from there.

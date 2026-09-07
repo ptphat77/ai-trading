@@ -229,6 +229,43 @@ describe('BacktestEngine', () => {
       expect(trade.exitReason).toBe('tp');
       expect(trade.profit).toBeCloseTo(197.8); 
     });
+
+    it('should never open a second position while one is active', async () => {
+      const candles = [
+        { time: '2026-08-29T10:00:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
+        { time: '2026-08-29T10:01:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
+        { time: '2026-08-29T10:02:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
+        { time: '2026-08-29T10:03:00Z', open: 2000, high: 2002, low: 1998, close: 2000, volume: 100 },
+        // Candle 4: Triggers BUY
+        { time: '2026-08-29T10:04:00Z', open: 2000, high: 2001, low: 1999, close: 2000, volume: 100 },
+        // Candle 5: Price neither hits SL nor TP (stays between 1999 and 2002)
+        { time: '2026-08-29T10:05:00Z', open: 2000, high: 2002, low: 1999, close: 2001, volume: 100 },
+        // Candle 6: Still in position, hits TP
+        { time: '2026-08-29T10:06:00Z', open: 2002, high: 2006, low: 2001, close: 2005, volume: 100 }
+      ];
+
+      mockDataClient.getCandles.mockResolvedValue(candles);
+
+      buildContext.mockReturnValue({
+        symbol: 'XAU_USD',
+        timeframe: 'M5',
+        currentPrice: 2000,
+        indicators: {
+          utbot2_signal: 'buy',
+          stc_prev: 15,
+          stc_current: 20,
+          recent_swing_low: 1998,
+          atr: 2,
+          candle_body: 'bullish',
+          candle_wick_rejection: 'none'
+        }
+      });
+
+      const engine = new BacktestEngine({ dataClient: mockDataClient });
+      const result = await engine.runRuleBased(mockConfig);
+
+      expect(result.trades.length).toBe(1);
+    });
   });
 
   describe('AI-Simulated Mode', () => {
